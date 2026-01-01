@@ -4,7 +4,7 @@ name: Deploy to GitHub Pages
 # Deploy only when pushing to main (adjust branch if needed)
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "origin/main" ]
 
 # Least-privilege token: allow Pages deployment + OIDC for provenance
 permissions:
