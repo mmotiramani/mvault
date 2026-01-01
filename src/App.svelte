@@ -29,6 +29,14 @@
       vaultFile = await loadVaultFile();
       state = vaultFile ? 'locked' : 'new';
       initStatus = 'ready';
+
+      const params = new URLSearchParams(location.search);
+      const action = params.get('action');
+      if (initStatus === 'ready') {
+        if (action === 'unlock' && vaultFile) state = 'locked';
+        if (action === 'new-entry') { state = 'unlocked'; addEntry(); }
+      }
+
     } catch (err: any) {
       // Surface the error everywhere
       console.error('Initialization error:', err);
@@ -139,20 +147,62 @@
   .loading { background: #fff3cd; color: #856404; }
   .error { background: #f8d7da; color: #721c24; }
   .ready { background: #d4edda; color: #155724; }
+
+  /* App.svelte – splash styling */
+  .splash {
+    position: fixed; inset: 0; z-index: 9999;
+    display: grid; place-items: center;
+    background: #111111; color: #fff;
+    text-align: center;
+  }
+  .splash img { width: 96px; height: 96px; margin-bottom: .75rem; }
+
+.home { padding: 2rem 0; }
+.home .actions { display:flex; flex-wrap:wrap; gap:.75rem; }
+.import input[type="file"] { display:block; }
+
 </style>
 
 <main>
   <!-- Diagnostic banner -->
   {#if initStatus === 'loading'}
-    <div class="status loading">Initializing… (loading libsodium)</div>
+  
+    <div class="splash">
+      <img alt="MVault logo" src="/icons/icon-192-maskable.png" />
+      <h1>MVault</h1>
+      <p>Initializing secure crypto…</p>
+    </div> 
+  <!--div class="status loading">Initializing… (loading libsodium)</div -->
+
   {:else if initStatus === 'error'}
     <div class="status error">
       <strong>Initialization error</strong><br />
       {initError}
     </div>
-  {:else if initStatus === 'ready'}
-    <div class="status ready">Initialized OK</div>
-  {/if}
+
+{#if initStatus === 'ready' && (state === 'new' || state === 'locked')}
+  <section class="home">
+    <h2>Welcome to MVault</h2>
+    <div class="actions">
+      {#if state === 'locked'}
+        <input type="password" placeholder="Master password" bind:value={master} />
+        <button on:click={unlock} disabled={!master}>Unlock</button>
+      {/if}
+
+      {#if state === 'new'}
+        <input type="password" placeholder="Set master password" bind:value={master} />
+        <button on:click={createNew} disabled={!master}>Create Vault</button>
+      {/if}
+
+      <label class="import">
+        <span>Import vault file</span>
+        <input type="file" accept=".mvault,application/json" on:change={importVault} />
+      </label>
+      <button on:click={exportVault} disabled={!vaultFile}>Export .mvault</button>
+    </div>
+  </section>
+{/if}
+
 
   {#if initStatus !== 'ready'}
     <!-- Keep page visible even while initializing or on error -->
