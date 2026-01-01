@@ -1,0 +1,772 @@
+fine grained token
+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
+
+
+in our earlier conversation whcih ended due to "Sorry, this conversation has reached its limit. I want to continue from where we left. So providing the details of the earlier conversation
+
+We started with the following request by me mentioned between << >> 
+
+<< I am with extensive development experience in visual basic – activex, dll, UI and pl/sql – stored procedures, db design, triggers. Will be comfortable with any IDE and can quickly learn. Guide me to build an application for persisting very strongly encrypted data which can contain the following data elements with upto 100 entries.
+1. Username
+2. Password
+3. app URL/name
+4. notes Considerations
+5. Application to be used on android, windows 11, mac , iOS platform
+6. Can sideload / deploy without app stores
+7. Should be most secured and use best encryption and master password protected.
+8. Need 0 cost deployment
+9. Need 0 cost development tools
+10. Development on macbook
+11. Prefer Single codebase and utilities for development, not mandatory if technically not feasible.
+12. Very basic and simple UI for now
+13. include most important features for this purpose in the app.
+14. Persisted data should be portable from one device to other without compromising the security aspect
+15. Only for personal / family use.
+>
+You responded by doing the following
+1, we created PWA + TypeScript application named mvalut 
+2, It was accepting user name passwords and other data elements 
+3, created in svelte on VS Code using a
+	 libsodium, 
+	xchacha ,
+	Strong client-side crypto with Argon2id for key derivation and AES‑256‑GCM (or ChaCha20‑Poly1305) for authenticated encryption, 
+4, No App Store required; sideloading is simply visiting a URL or opening a local file server, Runs on Android, iOS, Windows, macOS in any modern browser, and can be “installed” like an app (Add to Home Screen / Desktop), ,
+5, A single encrypted file (e.g., vault.mvault) that you can export/import between devices without weakening security
+
+You created the below project structure mentioned below between {} 
+
+{
+mvault/
+  public/
+    manifest.json
+    icons/
+      icon-192.png
+      icon-512.png
+  src/
+    lib/
+      crypto.ts         # WebCrypto AES-GCM helpers
+      kdf.ts            # libsodium Argon2id derivation
+      vault.ts          # envelope encryption; export/import
+      store.ts          # idb-keyval persistence
+    components/
+      Unlock.svelte
+      List.svelte
+      EditEntry.svelte
+      Settings.svelte
+    sw.ts               # service worker
+    App.svelte
+    main.ts
+  vite.config.ts
+  svelte.config.js
+}
+
+I am providing the source code for some of the important files as follows where name and path of the file is at the beginning and its respective content is between << and >>
+
+1, public/manifest.json
+<<
+{
+  "name": "M Vault",
+  "short_name": "MVault",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+>>
+
+2, public/sw.js
+<<
+// public/sw.js
+const CACHE = 'mvault-cache-v1';
+const ASSETS = ['/', '/index.html', '/manifest.json'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request).then((hit) => hit || fetch(event.request))
+  );
+});
+``
+
+>>
+
+
+3, src/App.svelte
+<<
+
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { loadVaultFile, saveVaultFile } from './lib/store';
+  import { createVaultFile, openVaultFile, type VaultFile, type VaultData } from './lib/vault';
+  import { generatePassword } from './lib/passwords';
+
+  // --- diagnostic state shown on screen ---
+  let initStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
+  let initError: string | null = null;
+
+  // --- app state ---
+  let master = '';
+  let state: 'locked' | 'unlocked' | 'new' = 'locked';
+  let vaultFile: VaultFile | undefined;
+  let data: VaultData = { entries: [] };
+  let filter = '';
+
+  onMount(async () => {
+    initStatus = 'loading';
+    try {
+      // Load libsodium at runtime
+      const mod = await import('libsodium-wrappers-sumo');
+      await mod.default.ready;            // wait for WASM/JS init
+      // Quick sanity log
+      console.log('libsodium loaded; version major=', mod.default.library_version_major);
+
+      // Load any existing vault
+      vaultFile = await loadVaultFile();
+      state = vaultFile ? 'locked' : 'new';
+      initStatus = 'ready';
+    } catch (err: any) {
+      // Surface the error everywhere
+      console.error('Initialization error:', err);
+      initError = err?.message ?? String(err);
+      initStatus = 'error';
+    }
+  });
+
+  async function createNew() {
+    try {
+      const vf = await createVaultFile(master, { entries: [] });
+      await saveVaultFile(vf);
+      vaultFile = vf;
+      data = { entries: [] };
+      state = 'unlocked';
+    } catch (e) {
+      console.error('createNew error', e);
+      alert('Failed to create vault: ' + (e as any)?.message);
+    }
+  }
+
+  async function unlock() {
+    try {
+      if (!vaultFile) return;
+      data = await openVaultFile(master, vaultFile);
+      state = 'unlocked';
+    } catch (e) {
+      console.error('unlock error', e);
+      alert('Unlock failed: ' + (e as any)?.message);
+    }
+  }
+
+  function addEntry() {
+    data.entries = [
+      ...data.entries,
+      { id: crypto.randomUUID(), app: '', url: '', username: '', password: '', notes: '' }
+    ];
+  }
+
+  function removeEntry(id: string) {
+    data.entries = data.entries.filter(e => e.id !== id);
+  }
+
+  async function save() {
+    try {
+      if (!master) return;
+      const vf = await createVaultFile(master, data);
+      await saveVaultFile(vf);
+      vaultFile = vf;
+      alert('Saved');
+    } catch (e) {
+      console.error('save error', e);
+      alert('Save failed: ' + (e as any)?.message);
+    }
+  }
+
+  function copy(text: string) {
+    navigator.clipboard.writeText(text);
+    setTimeout(async () => {
+      const blank = '\u200B';
+      await navigator.clipboard.writeText(blank);
+    }, 15000);
+  }
+
+  function exportVault() {
+    if (!vaultFile) return;
+    const blob = new Blob([JSON.stringify(vaultFile, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'vault.mvault';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function importVault(ev: Event) {
+    const file = (ev.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const vf = JSON.parse(String(reader.result)) as VaultFile;
+        await saveVaultFile(vf);
+        vaultFile = vf;
+        state = 'locked';
+        master = '';
+        alert('Imported. Please unlock with your master password.');
+      } catch (e) {
+        console.error('import error', e);
+        alert('Import failed: ' + (e as any)?.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  $: filtered = data.entries.filter(e =>
+    [e.app, e.url, e.username].join(' ').toLowerCase().includes(filter.toLowerCase())
+  );
+</script>
+
+<style>
+  main { max-width: 900px; margin: 2rem auto; padding: 1rem; font: 14px/1.4 system-ui, sans-serif; }
+  input, textarea { width: 100%; padding: .5rem; margin: .25rem 0 .75rem; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { border-bottom: 1px solid #eee; padding: .5rem; text-align: left; }
+  .status { padding: .75rem; border-radius: 6px; margin-bottom: 1rem; }
+  .loading { background: #fff3cd; color: #856404; }
+  .error { background: #f8d7da; color: #721c24; }
+  .ready { background: #d4edda; color: #155724; }
+</style>
+
+<main>
+  <!-- Diagnostic banner -->
+  {#if initStatus === 'loading'}
+    <div class="status loading">Initializing… (loading libsodium)</div>
+  {:else if initStatus === 'error'}
+    <div class="status error">
+      <strong>Initialization error</strong><br />
+      {initError}
+    </div>
+  {:else if initStatus === 'ready'}
+    <div class="status ready">Initialized OK</div>
+  {/if}
+
+  {#if initStatus !== 'ready'}
+    <!-- Keep page visible even while initializing or on error -->
+    <p>If this persists, open DevTools (⌘⌥I) & check the console.</p>
+  {/if}
+
+  {#if state === 'new'}
+    <h2>Create new vault</h2>
+    <input type="password" placeholder="Master password (use a long passphrase)"
+           bind:value={master} />
+    <button on:click={createNew} disabled={!master || initStatus!=='ready'}>Create</button>
+    <hr />
+    <p>Or import an existing vault file:</p>
+    <input type="file" accept=".mvault,application/json" on:change={importVault} />
+  {:else if state === 'locked'}
+    <h2>Unlock vault</h2>
+    <input type="password" placeholder="Master password" bind:value={master} />
+    <div class="actions">
+      <button on:click={unlock} disabled={!master || !vaultFile || initStatus!=='ready'}>Unlock</button>
+      <input type="file" accept=".mvault,application/json" on:change={importVault} />
+    </div>
+  {:else}
+    <h2>Password Vault</h2>
+    <div class="actions">
+      <button on:click={addEntry}>Add</button>
+      <button on:click={save}>Save (re-encrypt)</button>
+      <button on:click={exportVault}>Export .mvault</button>
+      <input placeholder="Search" bind:value={filter} />
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>App / URL</th><th>Username</th><th>Password</th><th>Notes</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {#each filtered as e (e.id)}
+        <tr>
+          <td>
+            <input placeholder="App name" bind:value={e.app} />
+            <input placeholder="URL" bind:value={e.url} />
+          </td>
+          <td><input placeholder="username" bind:value={e.username} /></td>
+          <td class="row">
+            <input placeholder="password" bind:value={e.password} />
+            <button on:click={() => e.password = generatePassword()}>Generate</button>
+            <button on:click={() => copy(e.password)} disabled={!e.password}>Copy</button>
+          </td>
+          <td><textarea rows="2" bind:value={e.notes}></textarea></td>
+          <td><button on:click={() => removeEntry(e.id)}>Delete</button></td>
+        </tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+</main>
+
+>>
+
+4, src/lib/kdf.ts
+<<
+// src/lib/kdf.ts
+
+
+/** KDF parameters */
+export type KdfParams = {
+  salt: Uint8Array;      // 16 bytes random
+  opslimit: number;      // e.g., 3
+  memlimitMB: number;    // e.g., 64..128
+  parallelism: number;   // e.g., 2
+};
+
+import { getSodium } from './sodium';
+
+
+/** Derive a 256-bit master key (MK) from the password using Argon2id. */
+export async function deriveMasterKey(
+  password: string,
+  params: KdfParams
+): Promise<Uint8Array> {
+  const sodium = await getSodium();
+
+  // Guard rails: ensure salt has correct type and length
+  const salt = params.salt;
+  if (!(salt instanceof Uint8Array)) {
+    throw new TypeError('Salt must be a Uint8Array');
+  }
+  const required = 16; // libsodium.crypto_pwhash_SALTBYTES is 16 in libsodium.js dist
+  if (salt.length !== required) {
+    throw new TypeError(`Salt must be ${required} bytes, got ${salt.length}`);
+  }
+
+  // Derive the key using Argon2id
+  const key: Uint8Array = sodium.crypto_pwhash(
+    32,                              // outlen (we need a 256-bit MK)
+    password,                        // string or Uint8Array
+    salt,                            // Uint8Array(16)
+    Math.trunc(params.opslimit),     // integer
+    Math.trunc(params.memlimitMB) * 1024 * 1024, // integer bytes
+    sodium.crypto_pwhash_ALG_ARGON2ID13
+  );
+  return key;
+}
+
+
+/** Generate `n` cryptographically secure random bytes via libsodium. */
+export async function randomBytes(n: number) : Promise<Uint8Array> {
+  const sodium = await getSodium();
+    return sodium.randombytes_buf(Math.trunc(n));
+}
+
+>>
+
+5, src/lib/vault.ts
+<<
+// src/lib/vault.ts
+import { getSodium } from './sodium';
+import { deriveMasterKey, randomBytes, type KdfParams } from './kdf';
+
+export type Base64String = string;
+
+export const VAULT_MAGIC = 'MVAULT' as const;
+export const VAULT_VERSION = 1 as const;
+
+export type AeadAlgo = 'XCHACHA20-POLY1305';
+export type KdfAlgo = 'argon2id';
+
+export interface Entry {
+  id: string;
+  app: string;
+  url?: string;
+  username: string;
+  password: string;
+  notes?: string;
+}
+
+export interface VaultData {
+  entries: Entry[];
+}
+
+export interface VaultKdf {
+  algo: KdfAlgo;
+  salt_b64: Base64String;   // 16 bytes base64
+  opslimit: number;
+  memlimit_mb: number;      // MB
+  parallelism: number;
+}
+
+export interface VaultSection {
+  algo: AeadAlgo;           // XChaCha20-Poly1305
+  nonce_b64: Base64String;  // 24 bytes base64
+  ciphertext_b64: Base64String; // payload + 16-byte tag
+}
+
+export interface VaultFile {
+  magic: typeof VAULT_MAGIC;
+  version: typeof VAULT_VERSION;
+  kdf: VaultKdf;
+  dek_wrap: VaultSection;   // DEK wrapped with MK
+  payload: VaultSection;    // encrypted VaultData JSON
+}
+
+/** AAD that binds header/version to the AEAD operations. */
+export function getHeaderAAD(): Uint8Array {
+  return new TextEncoder().encode(`${VAULT_MAGIC}_v${VAULT_VERSION}`);
+}
+
+/** Type guard for VaultFile shape (shallow). */
+export function isVaultFile(v: unknown): v is VaultFile {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, any>;
+  return (
+    o.magic === VAULT_MAGIC &&
+    o.version === VAULT_VERSION &&
+    typeof o.kdf?.algo === 'string' &&
+    typeof o.kdf?.salt_b64 === 'string' &&
+    typeof o.dek_wrap?.nonce_b64 === 'string' &&
+    typeof o.dek_wrap?.ciphertext_b64 === 'string' &&
+    typeof o.payload?.nonce_b64 === 'string' &&
+    typeof o.payload?.ciphertext_b64 === 'string'
+  );
+}
+
+/** Throw if not a VaultFile (shallow check). */
+export function assertVaultFile(v: unknown, msg: string = 'Invalid vault file'): asserts v is VaultFile {
+  if (!isVaultFile(v)) throw new Error(msg);
+}
+
+/** Create a new VaultFile from data, protected by the master password. */
+export async function createVaultFile(
+  password: string,
+  data: VaultData,
+  kdfOverrides?: Partial<Omit<KdfParams, 'salt'>>
+): Promise<VaultFile> {
+  const sodium = await getSodium();
+
+  // KDF params (salt must be 16 bytes for libsodium crypto_pwhash)
+  const salt: Uint8Array = await randomBytes(16);
+  const kdf: KdfParams = {
+    salt,
+    opslimit: Math.trunc(kdfOverrides?.opslimit ?? 3),
+    memlimitMB: Math.trunc(kdfOverrides?.memlimitMB ?? 64),
+    parallelism: Math.trunc(kdfOverrides?.parallelism ?? 2)
+  };
+
+  // Master key (MK) from password
+  const mk: Uint8Array = await deriveMasterKey(password, kdf);
+
+  // Data Encryption Key (DEK)
+  const dek: Uint8Array = await randomBytes(32);
+
+  const aad: Uint8Array = getHeaderAAD();
+
+  // Wrap DEK with MK using XChaCha20-Poly1305 (24-byte nonce)
+  const wrapNonce: Uint8Array = sodium.randombytes_buf(
+    sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+  );
+  const wrappedDek: Uint8Array = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+    dek, aad, null, wrapNonce, mk
+  );
+
+  // Encrypt payload (entries JSON) with DEK
+  const plaintext: Uint8Array = new TextEncoder().encode(JSON.stringify(data));
+  const payNonce: Uint8Array = sodium.randombytes_buf(
+    sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+  );
+  const payloadCT: Uint8Array = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+    plaintext, aad, null, payNonce, dek
+  );
+
+  const vf: VaultFile = {
+    magic: VAULT_MAGIC,
+    version: VAULT_VERSION,
+    kdf: {
+      algo: 'argon2id',
+      salt_b64: sodium.to_base64(salt),
+      opslimit: kdf.opslimit,
+      memlimit_mb: kdf.memlimitMB,
+      parallelism: kdf.parallelism
+    },
+    dek_wrap: {
+      algo: 'XCHACHA20-POLY1305',
+      nonce_b64: sodium.to_base64(wrapNonce),
+      ciphertext_b64: sodium.to_base64(wrappedDek)
+    },
+    payload: {
+      algo: 'XCHACHA20-POLY1305',
+      nonce_b64: sodium.to_base64(payNonce),
+      ciphertext_b64: sodium.to_base64(payloadCT)
+    }
+  };
+  return vf;
+}
+
+/** Open an existing VaultFile with the master password and return decrypted data. */
+export async function openVaultFile(password: string, vf: VaultFile): Promise<VaultData> {
+  const sodium = await getSodium();
+  assertVaultFile(vf, 'Bad vault header');
+
+  // Derive MK from file KDF
+  const salt: Uint8Array = sodium.from_base64(vf.kdf.salt_b64);
+  const mk: Uint8Array = await deriveMasterKey(password, {
+    salt,
+    opslimit: vf.kdf.opslimit,
+    memlimitMB: vf.kdf.memlimit_mb,
+    parallelism: vf.kdf.parallelism
+  });
+
+  const aad: Uint8Array = getHeaderAAD();
+
+  // Unwrap DEK
+  const wrapNonce: Uint8Array = sodium.from_base64(vf.dek_wrap.nonce_b64);
+  const wrappedDek: Uint8Array = sodium.from_base64(vf.dek_wrap.ciphertext_b64);
+  const dek: Uint8Array = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+    null, wrappedDek, aad, wrapNonce, mk
+  );
+
+  // Decrypt payload
+  const payNonce: Uint8Array = sodium.from_base64(vf.payload.nonce_b64);
+  const payloadCT: Uint8Array = sodium.from_base64(vf.payload.ciphertext_b64);
+  const plaintext: Uint8Array = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+    null, payloadCT, aad, payNonce, dek
+  );
+
+  const json: string = new TextDecoder().decode(plaintext);
+  const data: VaultData = JSON.parse(json) as VaultData;
+  return data;
+}
+
+/** Change the master password by re-wrapping the DEK (payload unchanged). */
+export async function rewrapMasterPassword(
+  oldPassword: string,
+  newPassword: string,
+  vf: VaultFile
+): Promise<VaultFile> {
+  const sodium = await getSodium();
+  assertVaultFile(vf, 'Invalid vault file');
+
+  // Old MK
+  const oldSalt: Uint8Array = sodium.from_base64(vf.kdf.salt_b64);
+  const oldMK: Uint8Array = await deriveMasterKey(oldPassword, {
+    salt: oldSalt,
+    opslimit: vf.kdf.opslimit,
+    memlimitMB: vf.kdf.memlimit_mb,
+    parallelism: vf.kdf.parallelism
+  });
+
+  const aad: Uint8Array = getHeaderAAD();
+
+  // Recover current DEK
+  const currentDEK: Uint8Array = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+    null,
+    sodium.from_base64(vf.dek_wrap.ciphertext_b64),
+    aad,
+    sodium.from_base64(vf.dek_wrap.nonce_b64),
+    oldMK
+  );
+
+  // New KDF + MK
+  const newSalt: Uint8Array = await randomBytes(16);
+  const newKdf: KdfParams = {
+    salt: newSalt,
+    opslimit: 3,
+    memlimitMB: 64,
+    parallelism: 2
+  };
+  const newMK: Uint8Array = await deriveMasterKey(newPassword, newKdf);
+
+  // Re-wrap DEK
+  const newWrapNonce: Uint8Array = sodium.randombytes_buf(
+    sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+  );
+  const newWrappedDek: Uint8Array = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+    currentDEK, aad, null, newWrapNonce, newMK
+  );
+
+  const updated: VaultFile = {
+    ...vf,
+    kdf: {
+      algo: 'argon2id',
+      salt_b64: sodium.to_base64(newSalt),
+      opslimit: newKdf.opslimit,
+      memlimit_mb: newKdf.memlimitMB,
+      parallelism: newKdf.parallelism
+    },
+    dek_wrap: {
+      algo: 'XCHACHA20-POLY1305',
+      nonce_b64: sodium.to_base64(newWrapNonce),
+      ciphertext_b64: sodium.to_base64(newWrappedDek)
+    }
+    // payload unchanged
+  };
+  return updated;
+}
+
+/** Serialize vault to JSON string. */
+export function serializeVaultFile(vf: VaultFile): string {
+  return JSON.stringify(vf);
+}
+
+/** Parse JSON string into VaultFile and assert shape. */
+export function deserializeVaultFile(json: string): VaultFile {
+  const parsed: unknown = JSON.parse(json);
+  assertVaultFile(parsed, 'Malformed vault JSON');
+  return parsed;
+}
+>>
+
+6, package.json
+<<
+{
+  "name": "mvault",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "deploy" : "gh-pages -d dist"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tsconfig/svelte": "^5.0.6",
+    "@types/node": "^24.10.1",
+    "gh-pages": "^6.3.0",
+    "svelte": "^5.43.8",
+    "svelte-check": "^4.3.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.2",
+    "libsodium-wrappers-sumo": "^0.7.16",
+    "zod": "^4.2.1"
+  }
+}
+
+>>
+
+7, readme.md
+<<
+# Svelte + TS + Vite
+
+This template should help get you started developing with Svelte and TypeScript in Vite.
+
+## Recommended IDE Setup
+
+[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+
+## Need an official Svelte framework?
+
+Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+
+## Technical considerations
+
+**Why use this over SvelteKit?**
+
+- It brings its own routing solution which might not be preferable for some users.
+- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+
+This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+
+Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+
+**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+
+Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+
+**Why include `.vscode/extensions.json`?**
+
+Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
+
+**Why enable `allowJs` in the TS template?**
+
+While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
+
+**Why is HMR not preserving my local component state?**
+
+HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
+
+If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
+
+```ts
+// store.ts
+// An extremely simple external store
+import { writable } from 'svelte/store'
+export default writable(0)
+```
+
+
+>>
+​‌sodium.ts
+
+<<
+
+// src/lib/sodium.ts
+let sodiumPromise: Promise<any> | null = null;
+
+export async function getSodium() : Promise<any> {
+  if (!sodiumPromise) {
+    sodiumPromise = (async () => {
+      const mod = await import('libsodium-wrappers-sumo');
+      await mod.default.ready;
+      return mod.default;
+    })();
+  }
+  console.log('sodium ready; has xchacha?', !!sodiumPromise.crypto_aead_xchacha20poly1305_ietf_encrypt);
+  return sodiumPromise;
+}
+
+>>
+
+store.ts
+<<
+
+// src/lib/store.ts
+import { get, set } from 'idb-keyval';
+import type { VaultFile } from './vault';
+
+const VAULT_KEY = 'mvault:file';
+
+export function saveVaultFile(vf: VaultFile) : Promise<void>{ return set(VAULT_KEY, vf); }
+export function loadVaultFile(): Promise<VaultFile | undefined> { return get(VAULT_KEY); }
+``
+
+>>
+
+passwords.ts
+<<
+
+// src/lib/passwords.ts
+export function generatePassword(len = 20, symbols = true) : string{
+  const alpha = 'abcdefghijklmnopqrstuvwxyz';
+  const ALPHA = alpha.toUpperCase();
+  const digits = '0123456789';
+  const sym = '!@#$%^&*()-_=+[]{};:,.<>?';
+  const charset = alpha + ALPHA + digits + (symbols ? sym : '');
+  const arr = new Uint32Array(len);
+  crypto.getRandomValues(arr);
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    out += charset[arr[i] % charset.length];
+  }
+  return out;
+}
+``
+
+
+>>
