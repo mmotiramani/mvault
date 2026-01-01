@@ -3,7 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/mvault/', // Replace with your repo name
+  base: process.env.GH_PAGES ? '/mvault/' : '/', // Replace with your repo name
   plugins: [svelte()],
   optimizeDeps: {
     include: ['libsodium-wrappers-sumo']
@@ -13,7 +13,6 @@ export default defineConfig({
 
  build: {
     chunkSizeWarningLimit: 1200 // kB
-  }, 
-  base: process.env.GH_PAGES ? '/mvault/' : '/'
+  }
 
 });
