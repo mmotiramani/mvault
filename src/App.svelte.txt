@@ -22,7 +22,7 @@
       const mod = await import('libsodium-wrappers-sumo');
       await mod.default.ready;            // wait for WASM/JS init
       // Quick sanity log
-      console.log('libsodium loaded; version major=', mod.default.SODIUM_LIBRARY_VERSION_MAJOR );
+      console.log('libsodium loaded; version major=', mod.default.library_version_major);
 
       // Load any existing vault
       vaultFile = await loadVaultFile();
@@ -165,13 +165,13 @@
 <main>
   <!-- Diagnostic banner -->
   {#if initStatus === 'loading'}
-
+  
     <div class="splash">
       <img alt="MVault logo" src="/icons/icon-192-maskable.png" />
       <h1>MVault</h1>
       <p>Initializing secure crypto…</p>
-    </div>
-    <div class="status loading">Initializing… (loading libsodium)</div>
+    </div> 
+  <div> class="status loading">Initializing… (loading libsodium)</div>
 
   {:else if initStatus === 'error'}
     <div class="status error">
@@ -179,7 +179,7 @@
       {initError}
     </div>
 
-  {:else if initStatus === 'ready' && (state === 'new' || state === 'locked')}
+{#if initStatus === 'ready' && (state === 'new' || state === 'locked')}
   <section class="home">
     <h2>Welcome to MVault</h2>
     <div class="actions">
