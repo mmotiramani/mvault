@@ -1,6 +1,6 @@
 
 // src/lib/sodium.ts
-let sodiumPromise: any | null = null;
+let sodiumPromise: Promise<any> | null = null;
 
 export async function getSodium() : Promise<any> {
   if (!sodiumPromise) {
