@@ -9,5 +9,10 @@ export default defineConfig({
     include: ['libsodium-wrappers-sumo']
   },
   // Optional: If you ever see process polyfill warnings (depends on your setup)
-  define: { 'process.env.NODE_DEBUG': false }
+  define: { 'process.env.NODE_DEBUG': false },
+
+ build: {
+    chunkSizeWarningLimit: 1200 // kB
+  }
+
 });
