@@ -19,10 +19,10 @@
     initStatus = 'loading';
     try {
       // Load libsodium at runtime
-      const mod = await import('libsodium-wrappers-sumo');
-      await mod.default.ready;            // wait for WASM/JS init
+      const sodium = await import('libsodium-wrappers-sumo' as any);
+      await sodium.default.ready;            // wait for WASM/JS init
       // Quick sanity log
-      console.log('libsodium loaded; version major=', mod.default.SODIUM_LIBRARY_VERSION_MAJOR );
+      console.log('libsodium loaded; version major=', sodium.default.SODIUM_LIBRARY_VERSION_MAJOR );
 
       // Load any existing vault
       vaultFile = await loadVaultFile();
