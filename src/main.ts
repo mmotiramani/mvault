@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
   console.log('test 1');
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('sw.js')
       .then((registration) => {
         // Optional: log scope or add update handling here
         console.log('test 2');

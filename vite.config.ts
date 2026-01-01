@@ -13,6 +13,7 @@ export default defineConfig({
 
  build: {
     chunkSizeWarningLimit: 1200 // kB
-  }
+  }, 
+  base: process.env.GH_PAGES ? '/mvault/' : '/'
 
 });
