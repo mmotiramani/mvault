@@ -5,6 +5,13 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: process.env.GH_PAGES ? '/mvault/' : '/', // Replace with your repo name
   plugins: [svelte()],
+  
+  resolve: {
+    alias: {
+      'libsodium-wrappers-sumo':
+        'libsodium-wrappers-sumo/dist/modules-sumo/libsodium-wrappers.js',
+    },
+  },
   optimizeDeps: {
     include: ['libsodium-wrappers-sumo']
   },
