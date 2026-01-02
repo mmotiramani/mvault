@@ -1,6 +1,7 @@
 
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
+import path from 'node:path';
 
 export default defineConfig({
   base: process.env.GH_PAGES ? '/mvault/' : '/', // Replace with your repo name
@@ -9,7 +10,10 @@ export default defineConfig({
   resolve: {
     alias: {
       'libsodium-wrappers-sumo':
-        'libsodium-wrappers-sumo/dist/modules-sumo/libsodium-wrappers.js',
+      path.resolve(
+          __dirname,
+          'node_modules/libsodium-wrappers-sumo/dist/modules-sumo/libsodium-wrappers.js'
+        ),
     },
   },
   optimizeDeps: {
