@@ -3,8 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=20.19 <21 || >=22.12" },
-
+  "engines": {
+    "node": ">=20.19 <21 || >=22.12"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -22,7 +23,8 @@
     "svelte": "^5.43.8",
     "svelte-check": "^4.3.4",
     "typescript": "~5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-pwa": "^1.2.0"
   },
   "dependencies": {
     "idb-keyval": "^6.2.2",
