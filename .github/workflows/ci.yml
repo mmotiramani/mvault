@@ -3,45 +3,55 @@ name: CI (Build & Test)
 
 on:
   push:
-    branches: [ "**" ]       # run on all branches
+    branches: [ "**" ]                  # run on all branches
   pull_request:
     branches: [ "**" ]
+
+# Principle of least privilege for the job token
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Avoid overlapping runs on the same ref when you push quickly
+    # Test against both Node versions that Vite supports
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [ "20.19.x", "22.12.x" ]
+
+    # Avoid overlapping runs on the same ref/version if you push quickly
     concurrency:
-      group: ci-${{ github.ref }}
+      group: ci-${{ github.ref }}-${{ matrix.node-version }}
       cancel-in-progress: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.0'
+          node-version: ${{ matrix.node-version }}
           check-latest: true
-          # Built-in package manager caching (npm/yarn/pnpm) keyed by lockfile
-          cache: 'npm'                     # package-lock.json required
-            # If you prefer manual cache control, replace the above with actions/cache & a lockfile hash key.
+          # Built-in package manager caching keyed by lockfile
+          cache: 'npm'                  # requires package-lock.json
 
       - name: Sanity check
         run: node -v
 
-
       - name: Install dependencies (CI mode)
         run: npm ci
         # npm ci uses package-lock.json for reproducible installs on CI
-        # and is the recommended approach with setup-node + lockfile
 
-      - name: Type & Svelte checks (optional, since you have a 'check' script)
-        run: npm run check
+      - name: Type & Svelte checks (optional)
+        run: npm run check --if-present
+
+      - name: Unit tests (optional)
+        run: npm test --if-present
 
       - name: Build
         env:
-          GH_PAGES: "0"                    # normal base for local/PR builds
+          GH_PAGES: "0"                 # normal base for CI/PR builds
         run: npm run build
