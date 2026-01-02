@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 import path from 'node:path';
 
 export default defineConfig({
-  base: process.env.GH_PAGES ? '/mvault/' : '/', // Replace with your repo name
+  base:  '/mvault/' , // Replace with your repo name
   plugins: [svelte()],
   
   resolve: {

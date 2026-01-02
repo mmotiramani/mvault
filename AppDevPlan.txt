@@ -1,0 +1,255 @@
+Perfect—that simplifies things. Since there’s **no legacy data**, we’ll start directly on **schema v2** and remove the migration task. Below is the updated plan (1–2 hrs/day), plus the ready‑to‑use **data model**, **crypto/storage stubs**, and **acceptance criteria**. You can copy these into mvault and begin.
+
+***
+
+## ✅ Finalized data model (v2 from day one)
+
+```ts
+// Encrypted payload for each credential
+export type VaultItemPayload = {
+  name: string;            // e.g., "GitHub", "Acme Bank"
+  username: string;
+  password: string;
+  url?: string;
+  tags: string[];          // normalized to lowercase
+  notes?: string;          // up to 4000 chars (soft limit)
+};
+
+// Record stored in IndexedDB
+export type VaultItem = {
+  id: string;              // uuid
+  createdAt: number;
+  updatedAt: number;
+  enc: {
+    v: 2;                  // schema version
+    iv: number[];          // AES-GCM 96-bit IV
+    ct: number[];          // ciphertext bytes
+  };
+};
+
+// Vault header (saved alongside DB metadata or in export file)
+export type VaultHeader = {
+  version: 1;
+  kdf: { type: 'PBKDF2'; hash: 'SHA-256'; iterations: number; salt: number[] };
+};
+```
+
+> Everything (including **name**, **tags**, **notes**) is encrypted at rest. We’ll decrypt items **only after unlock**, keep them in memory, and clear on lock/blur/inactivity.
+
+***
+
+## 🗺️ Updated development plan (no migration), 1–2 hrs/day
+
+### Week 1 — Core & Tags (top priority)
+
+**Goal:** basic vault working end‑to‑end + tags editor in the drawer.
+
+*   **Day 1:**
+    *   Implement **KDF (PBKDF2‑SHA256)** + AES‑GCM helpers.
+    *   Create **unlock** screen (passphrase → derive key → keep only in memory).
+    *   Add **auto‑lock** timer (e.g., 10 min) + manual *Lock* button.
+
+*   **Day 2:**
+    *   IndexedDB store (one object store: `items`).
+    *   CRUD API: `createItem(payload)`, `listItems()`, `updateItem(id, payload)`, `deleteItem(id)`.
+    *   Wire encryption/decryption inside the store.
+
+*   **Day 3:**
+    *   List + detail **drawer** (your “reveal‑one” UX baseline).
+    *   **Hold‑to‑reveal** password; **auto‑hide** after N seconds and on tab blur; **copy** button with 15s clipboard overwrite.
+
+*   **Day 4:**
+    *   **Tags** in the drawer: chips UI (add/remove, lowercase, dedupe, max length 32).
+    *   Compute `allTags` after unlock by decrypting in memory.
+
+*   **Day 5:**
+    *   **Tag suggestions** (type‑ahead from `allTags`).
+    *   Unit tests: crypto round‑trip; add/remove tags; reveal auto‑hide.
+
+### Week 2 — Tag filtering & grouping (top priority)
+
+**Goal:** quick navigation by tags.
+
+*   **Day 6:** Global **tag filter bar** (multi‑select chips).
+*   **Day 7:** Filter logic on decrypted items (AND logic; later add OR toggle if needed).
+*   **Day 8:** **Grouping view**: left column lists tags with counts; click to filter.
+*   **Day 9:** Keyboard shortcuts (`g t` open filter, `Esc` clear).
+*   **Day 10:** Tests: filter correctness, lock clears state, perf on \~150 items.
+
+### Week 3 — Long notes (2k–4k) (priority)
+
+**Goal:** secure notes per entry.
+
+*   **Day 11:** Notes textarea in drawer (auto‑resize, soft limit 4000, counter).
+*   **Day 12:** Debounced **autosave** on blur; “Saved” toast.
+*   **Day 13:** Ensure notes hidden on blur/lock; never shown outside drawer.
+*   **Day 14–15:** Tests: long notes round‑trip; accessibility (labels, focus, ARIA).
+
+### Week 4 — Import (last priority)
+
+**Goal:** safe, local import (CSV/JSON).
+
+*   **Day 16:** Import modal (after unlock) + file picker/drag‑drop.
+*   **Day 17:** Parser + **normalizer** (map `title|label|site|app → name`; split `tags`; truncate `notes`).
+*   **Day 18:** **Preview table** (hide passwords by default; *hold‑to‑reveal* in preview); duplicate handling by `(name, username)` (and optional URL host).
+*   **Day 19–20:** Commit encrypted items; tests for malformed input, duplicates, long notes.
+
+### Week 5 — Optional polish
+
+*   Tag maintenance (rename/merge tags across items).
+*   Export presets (Generic CSV, KeePass‑style CSV, Bitwarden‑style CSV/JSON).
+*   Lighthouse & a11y pass; small perf tweaks.
+
+***
+
+## 🔐 Crypto & storage stubs (drop‑in)
+
+> You can paste these into a `crypto.ts` and `store.ts` as a starting point.
+
+**`crypto.ts` (PBKDF2 + AES‑GCM helpers)**
+
+```ts
+// crypto.ts
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+export async function deriveKey(passphrase: string, salt: Uint8Array, iterations = 250_000) {
+  const baseKey = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+export function randIV() {
+  return crypto.getRandomValues(new Uint8Array(12));
+}
+
+export async function encryptJSON(key: CryptoKey, obj: unknown) {
+  const iv = randIV();
+  const data = enc.encode(JSON.stringify(obj));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  return { iv: Array.from(iv), ct: Array.from(new Uint8Array(ct)) };
+}
+
+export async function decryptJSON<T>(key: CryptoKey, ivArr: number[], ctArr: number[]): Promise<T> {
+  const iv = new Uint8Array(ivArr);
+  const ct = new Uint8Array(ctArr);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return JSON.parse(dec.decode(new Uint8Array(pt))) as T;
+}
+```
+
+**`store.ts` (IndexedDB + encrypted CRUD)**
+
+```ts
+// store.ts
+import { encryptJSON, decryptJSON } from './crypto';
+
+const DB_NAME = 'mvault';
+const STORE = 'items';
+
+export type EncryptedItem = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  enc: { v: 2; iv: number[]; ct: number[] };
+};
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function createItem(key: CryptoKey, id: string, payload: unknown) {
+  const db = await openDB();
+  const now = Date.now();
+  const enc = await encryptJSON(key, payload);
+  const item: EncryptedItem = { id, createdAt: now, updatedAt: now, enc: { v: 2, ...enc } };
+  await txPut(db, item);
+  db.close();
+  return item;
+}
+
+export async function listItems<T>(key: CryptoKey): Promise<Array<{ item: EncryptedItem; payload: T }>> {
+  const db = await openDB();
+  const all = await txGetAll<EncryptedItem>(db);
+  db.close();
+  return Promise.all(all.map(async (i) => ({
+    item: i,
+    payload: await decryptJSON<T>(key, i.enc.iv, i.enc.ct)
+  })));
+}
+
+export async function updateItem<T>(key: CryptoKey, i: EncryptedItem, payload: T) {
+  const db = await openDB();
+  const enc = await encryptJSON(key, payload);
+  const upd: EncryptedItem = { ...i, updatedAt: Date.now(), enc: { v: 2, ...enc } };
+  await txPut(db, upd);
+  db.close();
+  return upd;
+}
+
+export async function deleteItem(id: string) {
+  const db = await openDB();
+  await txDel(db, id);
+  db.close();
+}
+
+function txPut(db: IDBDatabase, val: unknown) {
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(val);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function txDel(db: IDBDatabase, key: IDBValidKey) {
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function txGetAll<T>(db: IDBDatabase) {
+  return new Promise<T[]>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result as T[]);
+    req.onerror = () => reject(req.error);
+  });
+}
+```
+
+> We’ll add the **reveal‑only‑one**, **hold‑to‑reveal**, and **auto‑hide** logic in the drawer component during Week 1, Day 3.
+
+***
+
+## 🧪 Acceptance criteria snapshot
+
+*   **Reveal‑one invariant**: at most one password visible; switching entries auto‑hides previous.
+*   **Tags**: add/remove in drawer; suggestions from existing tags; encrypted at rest.
+*   **Tag search/grouping**: multi‑tag filter; counts per tag; keyboard shortcuts.
+*   **Notes (2k–4k)**: autosave, encrypted at rest; hide on blur/lock.
+*   **Import**: CSV/JSON normalized to `name` (accept `title|label|site|app`); preview with masked passwords; duplicates handled; all encryption client‑side.
+
+***
+
+## What I’ll do first (now that there’s no migration)
+
+*   **Day 1–2**: finalize `crypto.ts` and `store.ts` (above), unlock screen, and in‑memory key handling + auto‑lock timer.
+*   **Day 3**: drawer + reveal‑one behavior.
+*   **Day 4–5**: tags editor + suggestions.
+
+Would you like me to also scaffold the **import normalizer** (header mapping to `name`) now, or keep it for Week 4 as planned?
