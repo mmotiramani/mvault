@@ -175,3 +175,30 @@ input, textarea, select, button {
   touch-action: manipulation; /* reduces delays on taps */
 }
 
+
+/* Readable defaults */
+html { font-size: 16px; }
+body { line-height: 1.5; }
+
+/* Prevent iOS zoom-on-focus by keeping controls >=16px */
+input, textarea, select, button { font-size: 16px; }
+
+/* Responsive headings (optional) */
+h1 { font-size: clamp(1.25rem, 2.5vw + 0.5rem, 1.75rem); }
+h2 { font-size: clamp(1.125rem, 2vw + 0.5rem, 1.5rem); }
+
+
+/* Never let media exceed the viewport width */
+img, video { max-width: 100%; height: auto; }
+
+/* Break very long words/URLs (e.g., in notes or URL fields) */
+* { word-wrap: break-word; overflow-wrap: anywhere; }
+
+/* Ensure containers don’t force a wide layout */
+.sidebar, .drawer, .list { min-width: 0; }
+
+
+@media (max-width: 700px) {
+  .row { padding: .6rem .7rem; border-radius: 10px; }
+  .row .sub { font-size: .95rem; }
+}

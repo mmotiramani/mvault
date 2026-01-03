@@ -144,6 +144,25 @@
     background: var(--panel);
     color: var(--text);
   }
+
+/* --- Mobile: stack list and drawer --- */
+  @media (max-width: 700px) {
+    .vault {
+      grid-template-columns: 1fr;       /* single column */
+      height: auto;                      /* let content size itself */
+      gap: .75rem;
+      padding: .75rem;
+    }
+    .list {
+      /* give the list a reasonable height; drawer follows below */
+      max-height: 42dvh;
+      overflow: auto;
+      border-right: none;                /* no inner divider on mobile */
+      border-bottom: 1px solid var(--field-border);
+      padding-bottom: .5rem;
+    }
+  }
+
   .sidebar { display:grid; grid-template-rows: auto auto 1fr; gap:.75rem; }
   .toolbar { display:flex; gap:.5rem; align-items:center; }
   #mv-search {
