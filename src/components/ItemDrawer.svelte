@@ -5,6 +5,12 @@
   import TagChips from './TagChips.svelte';
   import type { VaultItem, VaultItemPayload } from '../lib/data/types';
 
+
+  // NEW imports for saving notes
+  import { updateItem } from '../lib/data/store';
+  import { session } from '../lib/app/session';
+  import { get } from 'svelte/store';
+
   export let selectedId: string | null;
   export let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   const dispatch = createEventDispatcher<{ close: void }>();
@@ -35,6 +41,48 @@
   async function onCopy() {
     if (entry) await copyWithTemporaryOverwrite(entry.payload.password, 15_000);
   }
+
+
+  // ------------ NEW: URL helpers ------------
+  function normalizedHref(u?: string) {
+    if (!u) return '';
+    try {
+      // if u is absolute: new URL(u) works; if relative: resolve against current origin
+      const url = new URL(u, location.origin);
+      return url.href;
+    } catch {
+      // best effort: assume https
+      return `https://${u}`;
+    }
+  }
+
+  async function onCopyUrl() {
+    if (entry?.payload.url) {
+      await copyWithTemporaryOverwrite(entry.payload.url, 8_000);
+    }
+  }
+
+  // ------------ NEW: Notes editing ------------
+  let notes = '';
+  $: notes = entry?.payload.notes ?? '';
+
+  function debounce<T extends (...args: any[]) => void>(fn: T, wait = 600) {
+    let t: number | null = null;
+    return (...args: Parameters<T>) => {
+      if (t) clearTimeout(t);
+      t = window.setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  const saveNotesDebounced = debounce(async () => {
+    if (!entry) return;
+    const key = get(session).key!;
+    const updated = { ...entry.payload, notes };
+    await updateItem<VaultItemPayload>(key, entry.item, updated);
+    // keep local view in sync
+    entry = { ...entry, payload: updated };
+  });
+
 </script>
 
 <section class="drawer">
@@ -76,10 +124,46 @@
       {/if}
     </div>
 
+
+    <!-- NEW: URL -->
+    <div class="field">
+      <label>URL</label>
+      <div class="url">
+        <input readonly value={entry.payload.url || ''} placeholder="(no URL)" />
+        <a
+          class="btn"
+          href={normalizedHref(entry.payload.url)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open URL"
+          aria-disabled={!entry.payload.url}
+          on:click={(e) => { if (!entry?.payload.url) e.preventDefault(); }}
+        >Open</a>
+        <button on:click={onCopyUrl} title="Copy URL" disabled={!entry?.payload.url}>📋</button>
+      </div>
+    </div>
+
+
     <div class="field">
       <label>Tags</label>
       <TagChips item={entry.item} payload={entry.payload} on:changed={(e) => entry = { ...entry!, payload: e.detail }} />
     </div>
+
+
+    <!-- NEW: Notes -->
+    <div class="field">
+      <label>Notes</label>
+      <textarea
+        bind:value={notes}
+        rows="6"
+        maxlength="4000"
+        placeholder="Add notes (up to ~4000 chars)"
+        on:input={saveNotesDebounced}
+      />
+      <small>{(notes || '').length}/4000</small>
+    </div>
+
+
   {/if}
 </section>
 
@@ -88,5 +172,12 @@
   header { display:flex; justify-content:space-between; align-items:center; }
   .field { display:grid; gap:.25rem; margin:.75rem 0; }
   .pw { display:flex; gap:.5rem; align-items:center; }
-  input[readonly] { padding:.5rem; border:1px solid #ddd; border-radius:4px; }
+ /* input[readonly] { padding:.5rem; border:1px solid #ddd; border-radius:4px; }
+*/
+  .url { display:flex; gap:.5rem; align-items:center; }
+  input[readonly], textarea { padding:.5rem; border:1px solid #2a2a2a; border-radius:6px; background:#1f1f1f; color:#ddd; }
+  textarea { resize: vertical; }
+  .btn { padding:.4rem .6rem; border-radius:6px; background:#2a2a2a; color:#ddd; text-decoration:none; }
+  .btn[aria-disabled="true"] { pointer-events:none; opacity:0.5; }
+
 </style>
