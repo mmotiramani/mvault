@@ -11,6 +11,23 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+
+  --bg: #ffffff;
+  --panel: #f7f8fa;
+  --text: #15171a;
+  --muted: #5f6672;
+
+  --chip-bg: #eef2ff;       /* subtle indigo tint */
+  --chip-fg: #1a1d22;       /* dark text for readability */
+  --chip-border: #c7d2fe;
+
+  --list-active-bg: #e8edf9; /* selected row background (light) */
+  --list-active-text: var(--text);
+
+  --field-bg: #f2f3f6;
+  --field-border: #cfd3db;
+
 }
 
 a {
@@ -75,5 +92,48 @@ button:focus-visible {
   }
   button {
     background-color: #f9f9f9;
+  }
+}
+
+/* Dark mode tokens */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121317;
+    --panel: #1a1d22;
+    --text: #e9eaf0;
+    --muted: #a6a9b2;
+
+    --chip-bg: #2c3140;       /* darker chip */
+    --chip-fg: #f0f1f6;       /* light text for contrast */
+    --chip-border: #3a4050;
+
+    --list-active-bg: #2a2f3a; /* selected row background (dark) */
+    --list-active-text: #f0f1f6;
+
+    --field-bg: #22262e;
+    --field-border: #3a3f49;
+  }
+}
+
+/* Improve placeholder contrast in both modes */
+::placeholder {
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* Edge/Windows High Contrast – respect system colors */
+@media (forced-colors: active) {
+  :root {
+    --bg: Canvas;
+    --panel: Canvas;
+    --text: CanvasText;
+    --muted: GrayText;
+    --chip-bg: Canvas;
+    --chip-fg: CanvasText;
+    --chip-border: CanvasText;
+    --list-active-bg: Highlight;
+    --list-active-text: HighlightText;
+    --field-bg: Canvas;
+    --field-border: CanvasText;
   }
 }

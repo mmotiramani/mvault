@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
   import { createVaultFile, openVaultFile, type VaultFile, type VaultData } from './lib/vault';
-  import { generatePassword } from './lib/passwords';
+  import { generatePassword } from './lib/utils/passwords';
 
   import Unlock from './components/Unlock.svelte';
   import VaultList from './components/VaultList.svelte';

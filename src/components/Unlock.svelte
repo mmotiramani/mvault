@@ -3,10 +3,25 @@
   import { initHeader, unlock } from '../lib/app/session';
   import { onMount } from 'svelte';
   let pass = '';
+  let passEl: HTMLInputElement; // <-- ref to the input
   let busy = false;
   let err: string | null = null;
 
-  onMount(() => { initHeader(); });
+  onMount(() => { 
+    initHeader(); 
+
+
+    // Edge-friendly: ensure focus after paint
+    setTimeout(() => {
+      if (passEl) {
+        passEl.focus();
+        // Optional: pre-select in case user wants to overwrite quickly
+        passEl.select?.();
+      }
+    }, 0);
+
+
+});
 
   async function onSubmit() {
     busy = true; err = null;
