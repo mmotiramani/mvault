@@ -1,4 +1,3 @@
-
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { session, refreshTags } from '../lib/app/session';
@@ -38,11 +37,31 @@
     await refreshTags();
   }
 
-  $: suggestions = (() => {
+    // Suggestions (unchanged)
+    $: suggestions = (() => {
     const all = get(session).allTags;
     const n = norm(input);
     return n ? all.filter(t => t.startsWith(n) && !(payload.tags || []).includes(t)).slice(0, 6) : [];
   })();
+
+  // ---- Mobile-friendly input only (no Add button) ----
+  function onKey(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      addTag(input);
+    }
+  }
+  function tokenizeAndAddFromInput() {
+    // Commit tags on comma/space; allow multiple at once e.g. "work, finance cloud"
+    const parts = input.split(/[,\s]+/).filter(Boolean);
+    if (parts.length > 1 || /[,\s]$/.test(input)) {
+      parts.forEach(addTag);
+      input = '';
+    }
+  }
+  function onInput() { tokenizeAndAddFromInput(); }
+  function onBlur() { if (norm(input)) addTag(input); }
+
 </script>
 
 <div class="tags">
@@ -54,7 +73,16 @@
   <input
     bind:value={input}
     placeholder="Add a tag"
-    on:keydown={(e) => { if (e.key === 'Enter') addTag(input); }}
+    
+    on:keydown={onKey}
+    on:input={onInput}
+    on:blur={onBlur}
+    inputmode="text"
+    enterkeyhint="done"
+    autocapitalize="none"
+    autocorrect="off"
+    spellcheck="false"
+    
   />
   {#if suggestions.length > 0}
     <div class="suggestions">

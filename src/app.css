@@ -28,6 +28,7 @@
   --field-bg: #f2f3f6;
   --field-border: #cfd3db;
 
+  padding-bottom: env(safe-area-inset-bottom); /* Respect iOS safe area when installed as PWA (notch) */
 }
 
 a {
@@ -136,4 +137,41 @@ button:focus-visible {
     --field-bg: Canvas;
     --field-border: CanvasText;
   }
+
 }
+/* --- Mobile comfort defaults --- */
+
+/* Prevent iOS input zoom by keeping font size >= 16px */
+input, textarea, select, button {
+  font-size: 16px;
+}
+
+/* Use dynamic viewport height (works better under mobile URL bars) */
+@supports (height: 100dvh) {
+  .uses-full-height {
+    height: 100dvh; /* assign this utility to containers that need full height */
+  }
+}
+
+/* Reduce bounce/refresh risks inside drawers on mobile */
+.drawer {
+  overscroll-behavior: contain;
+}
+
+/* Touch-friendly targets only on coarse pointers (phones/tablets) */
+@media (pointer: coarse) {
+  button, .chip button, .new, .match, .btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* Hold-to-reveal: avoid long-press selection/callout on mobile */
+.pw button,
+.pw input[readonly] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation; /* reduces delays on taps */
+}
+

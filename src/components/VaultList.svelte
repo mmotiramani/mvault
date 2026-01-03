@@ -90,7 +90,7 @@
   });
 </script>
 
-<div class="vault">
+<div class="vault uses-full-height">
   <aside class="sidebar">
     <div class="toolbar">
       <input id="mv-search" type="search" bind:value={q} placeholder="Search (/, name, user, url, tag)" />
@@ -137,7 +137,8 @@
   .vault {
     display: grid;
     grid-template-columns: 320px 1fr;
-    height: calc(100vh - 2rem);
+    /* mobile: use 100dvh if available via utility applied above */
+    height: calc(100vh - 2rem); /* desktop fallback; mobile will use 100dvh */
     gap: 1rem;
     padding: 1rem;
     background: var(--panel);

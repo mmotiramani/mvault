@@ -24,6 +24,11 @@
   const AUTO_HIDE_MS = 8000;
   let timer: number | null = null;
 
+
+  function ensureVisible(e: FocusEvent) {
+    (e.target as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   function holdStart() {
     if (!entry) return;
     revealedId = entry.item.id;
@@ -129,7 +134,10 @@
     <div class="field">
       <label>URL</label>
       <div class="url">
-        <input readonly value={entry.payload.url || ''} placeholder="(no URL)" />
+        <input readonly value={entry.payload.url || ''} 
+            on:focus={ensureVisible} 
+            placeholder="(no URL)" 
+        />
         <a
           class="btn"
           href={normalizedHref(entry.payload.url)}
@@ -157,6 +165,7 @@
         bind:value={notes}
         rows="6"
         maxlength="4000"
+        on:focus={ensureVisible}
         placeholder="Add notes (up to ~4000 chars)"
         on:input={saveNotesDebounced}
       />
@@ -168,7 +177,16 @@
 </section>
 
 <style>
-  .drawer { padding: 1rem; }
+
+  .drawer { padding: 1rem; overscroll-behavior: contain; }
+
+  .pw input[readonly],
+  .pw button {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
   header { display:flex; justify-content:space-between; align-items:center; }
   .field { display:grid; gap:.25rem; margin:.75rem 0; }
   .pw { display:flex; gap:.5rem; align-items:center; }

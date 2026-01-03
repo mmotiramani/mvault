@@ -35,6 +35,17 @@
     if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput); }
   }
 
+ 
+  function tokenizeAndAddFromInput() {
+    const parts = tagInput.split(/[,\s]+/).filter(Boolean);
+    if (parts.length > 1 || /[,\s]$/.test(tagInput)) {
+      parts.forEach(addTag);
+      tagInput = '';
+    }
+  }
+  function onTagInput() { tokenizeAndAddFromInput(); }
+  function onTagBlur() { if (norm(tagInput)) addTag(tagInput); }
+ 
 
 // ⬇ suggestions derived from session.allTags
   $: suggestions = (() => {
@@ -103,7 +114,18 @@
         <span class="chip">{t}<button on:click={() => removeTag(t)} aria-label={`remove ${t}`}>×</button></span>
       {/each}
     </div>
-    <input bind:value={tagInput} placeholder="Add a tag" on:keydown={onTagKey} />
+    <input 
+        bind:value={tagInput} 
+        placeholder="Add a tag" 
+        on:keydown={onTagKey} 
+        on:input={onTagInput}
+        on:blur={onTagBlur}
+        inputmode="text"
+        enterkeyhint="done"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
+    />
 
   
     {#if suggestions.length > 0}
