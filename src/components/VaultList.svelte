@@ -6,7 +6,7 @@
   import ItemDrawer from './ItemDrawer.svelte';
   import type { VaultItem, VaultItemPayload } from '../lib/data/types';
   import { listItems } from '../lib/data/store';
-  import { startAutoLock } from '../lib/app/autoLock';
+  import { startAutoLock } from '../lib/app/autolock';
 
   let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   let selectedId: string | null = null;

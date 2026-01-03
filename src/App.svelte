@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { loadVaultFile, saveVaultFile } from './lib/fileStoretore';
+  import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
   import { createVaultFile, openVaultFile, type VaultFile, type VaultData } from './lib/vault';
   import { generatePassword } from './lib/passwords';
 
