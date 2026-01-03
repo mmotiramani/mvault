@@ -3,7 +3,7 @@
   import { initHeader, unlock } from '../lib/app/session';
   import { onMount } from 'svelte';
   let pass = '';
-  let passEl: HTMLInputElement; // <-- ref to the input
+  let passEl: HTMLInputElement | null = null; // <-- ref to the input
   let busy = false;
   let err: string | null = null;
 
