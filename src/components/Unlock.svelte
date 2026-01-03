@@ -14,9 +14,9 @@
     // Edge-friendly: ensure focus after paint
     setTimeout(() => {
       if (passEl) {
-        passEl.focus();
+        (passEl as HTMLInputElement).focus();
         // Optional: pre-select in case user wants to overwrite quickly
-        passEl.select?.();
+        (passEl as HTMLInputElement).select?.();
       }
     }, 0);
 
