@@ -11,6 +11,10 @@
 
   let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   let selectedId: string | null = null;
+  let matchAll = false; // false = OR, true = AND
+  function toggleMatchMode() { matchAll = !matchAll; }
+  // ...
+
 
   // UI state
   let q = '';                       // search query
@@ -38,9 +42,15 @@
        || payload.username?.toLowerCase().includes(q.toLowerCase())
        || payload.url?.toLowerCase().includes(q.toLowerCase())
        || (payload.tags || []).some(t => t.includes(q.toLowerCase())));
-    const tagok = selectedTags.length === 0
-      ? true
-      : (payload.tags || []).some(t => selectedTags.includes(t.toLowerCase()));
+
+    const plTags = (payload.tags || []).map(t => t.toLowerCase());
+    const tagok =
+      selectedTags.length === 0 
+      ? true 
+      : matchAll
+        ? selectedTags.every(t => plTags.includes(t))  // AND
+        : selectedTags.some(t => plTags.includes(t));  // OR
+
     return qok && tagok;
   });
 
@@ -85,6 +95,10 @@
     <div class="toolbar">
       <input id="mv-search" type="search" bind:value={q} placeholder="Search (/, name, user, url, tag)" />
       <button class="new" on:click={() => showNew = true} title="New (n)">＋</button>
+
+      <button class="match" on:click={toggleMatchMode} title="Toggle tag match mode">
+        {matchAll ? 'Match: ALL' : 'Match: ANY'}
+      </button>
     </div>
 
     <!-- Tag filters from session -->
@@ -160,4 +174,73 @@
   .row.active { background: var(--list-active-bg); outline: 1px solid var(--chip-border); }
   .row .name { font-weight: 600; color: var(--text); }
   .row .sub  { color: var(--muted); font-size: .85rem; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .match {
+    border: 1px solid var(--field-border);
+    background: var(--field-bg);
+    color: var(--text);
+    border-radius: 6px;
+    padding: .4rem .6rem;
+  }
+
+
+/* Base tag pill */
+.filter-tags { display:flex; gap:.4rem; flex-wrap:wrap; }
+
+.filter-tags .t {
+  padding:.28rem .6rem;
+  border-radius:999px;
+  border:1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  line-height:1;
+  cursor:pointer;
+}
+
+/* Focus ring for keyboard users */
+.filter-tags .t:focus-visible {
+  outline: 2px solid var(--chip-border);
+  outline-offset: 2px;
+}
+
+/* Selected (ON) — filled pill + checkmark */
+.filter-tags .t.on {
+  /* Accent color: adjust if you prefer a different hue */
+  --mv-accent: #4f6ef7;
+  background: var(--mv-accent);
+  border-color: var(--mv-accent);
+  color: #fff;
+  font-weight: 600;
+  position: relative;
+}
+
+/* Prepend a subtle ✓ to selected tags */
+.filter-tags .t.on::before {
+  content: '✓';
+  font-size: 12px;
+  margin-right: .4rem;
+  display: inline-block;
+  transform: translateY(-1px); /* optical centering */
+}
+
+/* High Contrast mode (Edge/Windows) — use system colors */
+@media (forced-colors: active) {
+  .filter-tags .t.on {
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+  }
+  .filter-tags .t.on::before { content: '✓'; }
+}
+
+/* Match button visuals */
+.match {
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: .4rem .6rem;
+}
+
+
 </style>

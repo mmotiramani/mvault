@@ -1,4 +1,3 @@
-
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { session } from '../lib/app/session';
@@ -19,6 +18,10 @@
 
   let pwdOpts: PwdOpts = { length: 20, symbols: true, upper: true, lower: true, digits: true, avoidAmbiguous: true };
 
+
+  const MAX_TAG = 32;
+  const norm = (s: string) => s.trim().toLowerCase().slice(0, MAX_TAG);
+
   function addTag(t: string) {
     const v = t.trim().toLowerCase();
     if (!v) return;
@@ -31,6 +34,17 @@
   function onTagKey(e: KeyboardEvent) {
     if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput); }
   }
+
+
+// ⬇ suggestions derived from session.allTags
+  $: suggestions = (() => {
+    const all = get(session).allTags || [];
+    const v = norm(tagInput);
+    return v
+      ? all.filter(t => t.startsWith(v) && !tags.includes(t)).slice(0, 8)
+      : [];
+  })();
+
 
   function gen() { password = generatePassword(pwdOpts); }
 
@@ -90,7 +104,19 @@
       {/each}
     </div>
     <input bind:value={tagInput} placeholder="Add a tag" on:keydown={onTagKey} />
+
+  
+    {#if suggestions.length > 0}
+        <div class="suggestions">
+            {#each suggestions as s}
+                <button on:click={() => addTag(s)}>{s}</button>
+            {/each}
+        </div>
+    {/if}
+
   </div>
+  
+
 
   <div class="field">
     <label>Notes</label>
@@ -121,6 +147,13 @@
     border-radius:50%; border:1px solid var(--chip-border); background:transparent; color:var(--chip-fg);
     font-size:11px; line-height:1; padding:0; cursor:pointer;
   }
+  .suggestions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.45rem; }
+  .suggestions > button {
+    padding:.3rem .5rem; border-radius:6px;
+    background: var(--field-bg); color: var(--text);
+    border: 1px solid var(--field-border); cursor:pointer;
+  }
+
   footer.actions { display:flex; gap:.6rem; margin-top:1rem; }
   .primary { background:#4f6ef7; color:white; border:0; border-radius:6px; padding:.5rem .9rem; }
 </style>
