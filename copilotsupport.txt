@@ -1,6 +1,16 @@
 4th Jan
 ===================
 
+npm ci
+npm run build
+nvm use system
+npm -g ls
+npm i
+pnpm i
+npm run dev
+npm run preview
+
+
 Absolutely. I’ve read the CSS and Vite config and have **updated the mvaultJan1 baseline in long‑term memory** to include your cross‑platform assumptions (Android/iOS phones & tablets, macOS/Windows laptops/desktops) and current PWA build. No additional suggestions now—just capturing the facts, as you asked.
 
 Below is the concise snapshot of what I’ve recorded so we won’t need to repeat it later.
