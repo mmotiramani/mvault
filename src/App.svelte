@@ -215,9 +215,10 @@
     const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
     const pass = prompt('Enter passphrase to open vault:'); if (!pass) return;
     const text = await file.text();
-    // Non-FSA path: do not auto replace unless user chooses
-    const replace = confirm('Replace current vault with file? (Cancel = Merge)');
-    await import('./lib/bridge/vault-file').then(m => m.openFromText(text, pass, replace));
+    // Default MERGE; ask user only if they specifically want Replace
+    const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
+    const { openFromText } = await import('./lib/bridge/vault-file');
+    await openFromText(text, pass, replace);
   }} />
 </label>
 
