@@ -1,4 +1,11 @@
 <script lang="ts">
+
+  import Toast from './lib/ui/Toast.svelte';
+  import { showToast } from './lib/ui/toast';
+  import { openFromFileFSA, saveVaultFSA, saveVaultAsFSA, serializeVaultJSON } from './lib/bridge/vault-file';
+  import { startAutoLock } from './lib/app/autoLock'; // your file
+  // ... keep your existing imports (Unlock, VaultList, session, etc.)
+
   import { onMount } from 'svelte';
   import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
   import { createVaultFile, openVaultFile, type VaultFile, type VaultData } from './lib/vault';
@@ -8,6 +15,7 @@
   import VaultList from './components/VaultList.svelte';
   import { session } from './lib/app/session';
   $: unlocked = !!$session.key;
+
 
   // --- diagnostic state shown on screen ---
   let initStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
@@ -105,6 +113,16 @@
     }, 15000);
   }
 
+
+  // optional: autosave on blur/idle for FSA handle
+  function autosave() {
+    saveVaultFSA().catch(()=>{/* ignore */});
+  }
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') autosave();
+  });
+
+
   function exportVault() {
     if (!vaultFile) return;
     const blob = new Blob([JSON.stringify(vaultFile, null, 2)], { type: 'application/json' });
@@ -190,6 +208,19 @@
       {initError}
     </div>
 
+<button on:click={() => openFromFileFSA()}>Open (file)</button>
+<label class="import">
+  <span>Open from upload</span>
+  <input type="file" accept=".mvault,application/json" on:change={async (ev) => {
+    const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
+    const pass = prompt('Enter passphrase to open vault:'); if (!pass) return;
+    const text = await file.text();
+    // Non-FSA path: do not auto replace unless user chooses
+    const replace = confirm('Replace current vault with file? (Cancel = Merge)');
+    await import('./lib/bridge/vault-file').then(m => m.openFromText(text, pass, replace));
+  }} />
+</label>
+
   {:else if initStatus === 'ready' && (state === 'new' || state === 'locked')}
   <section class="home">
     <h2>Welcome to MVault</h2>
@@ -238,8 +269,20 @@
     <h2>Password Vault</h2>
     <div class="actions">
       <button on:click={addEntry}>Add</button>
-      <button on:click={save}>Save (re-encrypt)</button>
+      <!-- Save , Save As and Sync implementations-->   
+      <button on:click={() => saveVaultFSA()}>Save</button>
+      <button on:click={() => saveVaultAsFSA()}>Save As</button>
+      <button on:click={async () => {
+        const json = await serializeVaultJSON();
+        const blob = new Blob([json], { type:'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = 'vault-backup.mvault'; a.click(); URL.revokeObjectURL(a.href);
+        showToast('Backup exported', 'success');
+      }}>Export .mvault</button>
+
+     <!-- <button on:click={save}>Save (re-encrypt)</button>
       <button on:click={exportVault}>Export .mvault</button>
+     -->
       <input placeholder="Search" bind:value={filter} />
     </div>
 
@@ -268,3 +311,5 @@
     </table>
   {/if}
 </main>
+
+<Toast />
