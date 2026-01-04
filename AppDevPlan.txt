@@ -1,3 +1,62 @@
+4th Jan
+================
+0, Open , save , save as vault file
+     a, the vault will be saved always on device too in form of a file
+     b, we can decide about the trigger / UI option to make explicit save / sync if required
+     c,  this saved vault can be moved across devices 
+     c, while opening give an option to refresh it from file system or continue to use the memory.
+     d, for the first time when the user chooses to open i.e. when its created for first time , user is prompted to provide the location of teh file on the device.
+     e, automatically always save to local file system in addition to browser memory
+     f, while opening give an option to refresh it from file system or continue to use the memory.
+     g, export should consider all the items irrespective of the filtered or not.
+     h, while launching app it should always show the last vault file that was opened allowing user to choose a different vault file.
+0.final, Open , save , save as vault file
+     a, the vault will be saved always on device wherever supported, where need user friction like in safari/iOS, it will be saved via explicit user and till then it will stay in memory.
+     b, we can decide about the trigger / UI option to make explicit save / sync if required
+     c,  this saved vault can be moved across devices 
+     c, while opening give an option to refresh it from file system or continue to use the memory.
+     d, for the first time when the user chooses to open i.e. when its created for first time , user is prompted to provide the location of teh file on the device.
+     e, automatically always save to local file system in addition to browser memory
+     f, while opening give an option to refresh it from file system or continue to use the memory.
+     g, export should consider all the items irrespective of the filtered or not.
+     h, while launching app it should always show the last vault file that was opened allowing user to choose a different vault file.
+
+
+
+1, to Allow export / open of vault so that
+     a, the vault can be saved on device,
+     b, this saved vault can be moved across devices 
+     c, the saved vault can be uploaded to cloud services like OneDrive / Google Drive / email
+     d, the saved vault can only be opened by this application and no other application / tools can open it. I am not sure if this is a possibility.
+     e, automatically always save to local file system in addition to browser memory
+     f, while opening give an option to refresh it from file system or continue to use the memory.
+     g, export should consider all the items irrespective of the filtered or not.
+     h, while exporting 
+     i, i dont want to call it import instaed i want to call it open/load different vault, for example i could have different vault files.
+
+2, Allow possibility to change the passphrase
+      a, so that the vault can be re-encrypted with the new passphrase
+      b, evaluate the strength of the passphrase during the change of passphrase or creating for the first time and show indicator via color red, amber, green
+      c, 
+3, Allow transform and load of some other vault which could be in clear text.
+      a, is it possible to import the vault of application named password safe
+4, Allow update and save/cancel of all the data elements name, username, password,url. the update of notes,tags is already allowed
+5, show the total count and the filter count in form of <<filtercount>>/<<totalcount>>
+6, Once the valut is opened using passphrase, want to allow opening using the finterprint but only within 1hr or 10hr of opening via passphrase
+7, allow to read the url, username,suggested name from the image or picture taken
+8, allow to delete the entries via single or multiple select. Given an option to move them all under single RECYCLEBIN tag by removing all existing tag, do not allow changes to the items when in RECYCLEBIN tag
+9, Allow the operations using voice command
+10, Allow to create a QR code for the URL so that someone can direclty go to the URL by scannign the QR.
+11, Change of password reminder
+    a, for the entry
+    b, for the passphrase
+    c, allow default to be no reminder for entry, but reminder mandatory for passphrase to 90days, however overridable or delay/ignore passphrase change action
+ 12, Integration of saving and loading vault from cloud
+ 13, enable hardbinding with the device, i.e. the device can be opened only on the device where it was created on.
+ 14, enable TFA - two factor authentication to open it after a span of say 12 hours.
+ 15, Export only filtered or visible items to create a new vault and optionally cahnge the passphrase for the exported one.
+ 16, Importing another vault in existing / currently open vault , ensuring key is unique and any duplicate key would put a popup of all such duplicates and ask user to choos which one to overwrite adn which one to ingore and which one to merge
+ 17, 
 Perfect—that simplifies things. Since there’s **no legacy data**, we’ll start directly on **schema v2** and remove the migration task. Below is the updated plan (1–2 hrs/day), plus the ready‑to‑use **data model**, **crypto/storage stubs**, and **acceptance criteria**. You can copy these into mvault and begin.
 
 ***

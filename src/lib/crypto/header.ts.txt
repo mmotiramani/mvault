@@ -1,9 +1,8 @@
 
 // src/lib/crypto/header.ts
 import { DEFAULT_ITERATIONS } from './crypto';
-import type { Encrypted, VaultHeader } from '../data/types';
+import type { VaultHeader } from '../data/types';
 import { openDBWithSchema, META_STORE } from '../data/db';
-import { encryptJSON } from './crypto';
 
 async function metaGet<T>(key: IDBValidKey): Promise<T | undefined> {
   const db = await openDBWithSchema();
@@ -42,18 +41,4 @@ export async function getOrCreateHeader(): Promise<VaultHeader> {
 export async function deriveFromHeader(passphrase: string, header: VaultHeader): Promise<CryptoKey> {
   const { deriveKey } = await import('./crypto');
   return deriveKey(passphrase, new Uint8Array(header.kdf.salt), header.kdf.iterations);
-}
-
-
-export async function saveHeader(header: VaultHeader): Promise<void> {
-  await metaPut(META_KEY, header);
-}
-
-/** Create a small canary encrypted with the passphrase-derived key and persist it. */
-export async function ensureCanary(header: VaultHeader, key: CryptoKey): Promise<VaultHeader> {
-  if (header.canary) return header;
-  const c: Encrypted = { v: 2, ...(await encryptJSON(key, { m: 'MVault-canary' })) };
-  const out: VaultHeader = { ...header, canary: c };
-  await saveHeader(out);
-  return out;
 }
