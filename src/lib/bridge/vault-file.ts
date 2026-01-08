@@ -6,10 +6,11 @@ import { listItems } from '../data/store';
 import { decryptJSON } from '../crypto/crypto';
 import { openDBWithSchema, ITEMS_STORE } from '../data/db';
 import { showToast } from '../ui/toast';
-import {
-  pickOpenHandle, pickSaveHandle, getLastHandle,
-  readHandleText, writeHandleText, saveBlobFallback, setLastMeta
-} from '../io/fsa';
+
+
+import { get } from 'svelte/store';
+import { session } from '../app/session';
+
 
 type VaultFileJSON = { header: VaultHeader; items: VaultItem[] };
 
@@ -40,49 +41,17 @@ export async function validatePassphrase(header: VaultHeader, items: VaultItem[]
   }
 }
 
-/** FSA-capable: open -> REPLACE DB (overwrite memory) */
-export async function openFromFileFSA(): Promise<void> {
-  const handle = await pickOpenHandle();
-  if (!handle) { showToast('Open canceled or unavailable', 'info'); return; }
-  try {
-    const text = await readHandleText(handle);
-    const parsed = JSON.parse(text) as VaultFileJSON;
-    const { header, items } = parsed;
-    const pass = prompt('Enter passphrase to open vault:'); if (!pass) return;
-
-    const key = await validatePassphrase(header, items, pass);
-    const ensured = await ensureCanary(header, key);
-    if (ensured !== header) await saveHeader(ensured);
-
-    await clearItems();
-    const db = await openDBWithSchema();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(ITEMS_STORE, 'readwrite');
-      const store = tx.objectStore(ITEMS_STORE);
-      items.forEach(i => store.put(i));
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-
-    await setLastMeta({ name: (await handle.getFile()).name ?? 'vault.mvault', savedAt: Date.now() });
-    showToast('Vault opened (replaced from file)', 'success');
-  } catch (e: any) {
-    showToast(e?.code === 'incorrect-passphrase' ? 'Incorrect passphrase' : 'Failed to open vault', 'error');
-  }
-}
-
-/** Non-FSA: default MERGE; set replace=true to overwrite DB */
-export async function openFromText(text: string, passphrase: string, replace = false): Promise<void> {
+/** Manual Import (upload) — default MERGE; set replace=true to overwrite DB */
+export async function importFromText(text: string, passphrase: string, replace = false): Promise<void> {
   try {
     const parsed = JSON.parse(text) as VaultFileJSON;
     const { header, items } = parsed;
+
     const key = await validatePassphrase(header, items, passphrase);
     const ensured = await ensureCanary(header, key);
     if (ensured !== header) await saveHeader(ensured);
 
     if (replace) await clearItems();
-
     const db = await openDBWithSchema();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(ITEMS_STORE, 'readwrite');
@@ -95,53 +64,46 @@ export async function openFromText(text: string, passphrase: string, replace = f
 
     showToast(replace ? 'Vault replaced from file' : 'Vault merged from file', 'success');
   } catch (e: any) {
-    showToast(e?.code === 'incorrect-passphrase' ? 'Incorrect passphrase' : 'Failed to open vault', 'error');
+    showToast(e?.code === 'incorrect-passphrase' ? 'Incorrect passphrase' : 'Import failed', 'error');
   }
 }
 
-/** Serialize all items from DB into vault JSON (ensures canary when passphrase provided) */
-export async function serializeVaultJSON(passphrase?: string): Promise<string> {
-  const header = await getOrCreateHeader();
-  const key = passphrase ? await deriveFromHeader(passphrase, header) : null;
-  const finalHeader = key ? await ensureCanary(header, key) : header;
 
-  // If passphrase isn't provided here, listItems should still work with current key/state
-  const items = (await listItems<VaultItemPayload>(key || (await deriveFromHeader('', finalHeader)))).map(({ item }) => item);
-  return JSON.stringify({ header: finalHeader, items });
-}
-
-export async function saveVaultFSA(suggestedName = 'vault.mvault', passphrase?: string): Promise<void> {
+export async function exportToDownload(fileName = 'vault.mvault', passphrase?: string): Promise<void> {
   try {
-    const json = await serializeVaultJSON(passphrase);
-    const handle = await getLastHandle() || await pickSaveHandle(suggestedName);
-    if (handle) {
-      await writeHandleText(handle, json);
-      await setLastMeta({ name: (await handle.getFile()).name ?? suggestedName, savedAt: Date.now() });
-      showToast('Saved', 'success');
-    } else {
-      await saveBlobFallback(new Blob([json], { type: 'application/json' }), suggestedName);
-      showToast('Saved (downloaded)', 'success');
+    const s = get(session);
+    const header = s.header ?? (await getOrCreateHeader());
+
+    // Prefer the runtime unlocked key; if user supplied a passphrase, recompute explicitly
+    const key = passphrase
+      ? await deriveFromHeader(passphrase, header!)
+      : s.key;
+
+    if (!key) {
+      showToast('Vault is locked. Please unlock or provide passphrase.', 'error');
+      return;
     }
+
+    // Assert/refresh canary with the key being used
+    const finalHeader = await ensureCanary(header!, key);
+
+    // Decrypt with the correct key (no empty-pass fallback)
+    const items = (await listItems<VaultItemPayload>(key)).map(({ item }) => item);
+
+    const json = JSON.stringify({ header: finalHeader, items });
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+
+    console.log('exportToDownload succeeded');
+    showToast('Exported', 'success');
   } catch (err) {
-    console.error('saveVaultFSA failed:', err);
-    showToast('Save failed', 'error');
+    console.log('exportToDownload failed');
+    console.error('exportToDownload failed:', err);
+    showToast('Export failed', 'error');
   }
 }
 
-export async function saveVaultAsFSA(suggestedName = 'vault.mvault', passphrase?: string): Promise<void> {
-  try {
-    const json = await serializeVaultJSON(passphrase);
-    const handle = await pickSaveHandle(suggestedName);
-    if (handle) {
-      await writeHandleText(handle, json);
-      await setLastMeta({ name: (await handle.getFile()).name ?? suggestedName, savedAt: Date.now() });
-      showToast('Saved as', 'success');
-    } else {
-      await saveBlobFallback(new Blob([json], { type: 'application/json' }), suggestedName);
-      showToast('Saved as (downloaded)', 'success');
-    }
-  } catch (err) {
-    console.error('saveVaultAsFSA failed:', err);
-    showToast('Save As failed', 'error');
-  }
-}

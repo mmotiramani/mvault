@@ -2,7 +2,11 @@
 
   import Toast from './lib/ui/Toast.svelte';
   import { showToast } from './lib/ui/toast';
-  import { openFromFileFSA, saveVaultFSA, saveVaultAsFSA, serializeVaultJSON } from './lib/bridge/vault-file';
+ // import { openFromFileFSA, saveVaultFSA, saveVaultAsFSA, serializeVaultJSON } from './lib/bridge/vault-file';
+  
+  import { importFromText, exportToDownload } from './lib/bridge/vault-file';
+  // ... keep your existing imports and logic (Unlock, VaultList, session, autoLock, etc.)
+
   import { startAutoLock } from './lib/app/autoLock'; // your file
   // ... keep your existing imports (Unlock, VaultList, session, etc.)
 
@@ -91,6 +95,24 @@
   function removeEntry(id: string) {
     data.entries = data.entries.filter(e => e.id !== id);
   }
+
+
+  async function onImportUpload(ev: Event) {
+    const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
+    const pass = prompt('Enter passphrase to import:'); if (!pass) return;
+    const text = await file.text();
+    // Default MERGE; allow REPLACE if user confirms
+    const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
+    await importFromText(text, pass, replace);
+    (ev.target as HTMLInputElement).value = ''; // reset input
+  }
+
+
+  async function onExportClick() {
+    console.log('goingto call exportToDownload');
+    await exportToDownload('vault.mvault');
+  }
+
 
   async function save() {
     try {
@@ -196,7 +218,7 @@
   {#if initStatus === 'loading'}
 
     <div class="splash">
-      <img alt="MVault logo" src="/icons/icon-192-maskable.png" />
+      <img alt="MVault logo" src="./icons/icon-192-maskable.png" />
       <h1>MVault</h1>
       <p>Initializing secure crypto…</p>
     </div>
@@ -208,21 +230,14 @@
       {initError}
     </div>
 
-<button on:click={() => openFromFileFSA()}>Open (file)</button>
-<label class="import">
-  <span>Open from upload</span>
-  <input type="file" accept=".mvault,application/json" on:change={async (ev) => {
-    const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
-    const pass = prompt('Enter passphrase to open vault:'); if (!pass) return;
-    const text = await file.text();
-    // Default MERGE; ask user only if they specifically want Replace
-    const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
-    const { openFromText } = await import('./lib/bridge/vault-file');
-    await openFromText(text, pass, replace);
-  }} />
-</label>
 
   {:else if initStatus === 'ready' && (state === 'new' || state === 'locked')}
+<button on:click={() => openFromFileFSA()}>Open (file)</button>
+<label class="import">
+  <span>Import (.mvault)</span>
+  <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
+</label>
+<button on:click={onExportClick}>Export .mvault</button>
   <section class="home">
     <h2>Welcome to MVault</h2>
     <div class="actions">
@@ -268,24 +283,17 @@
     </div>
   {:else}
     <h2>Password Vault</h2>
-    <div class="actions">
-      <button on:click={addEntry}>Add</button>
-      <!-- Save , Save As and Sync implementations-->   
-      <button on:click={() => saveVaultFSA()}>Save</button>
-      <button on:click={() => saveVaultAsFSA()}>Save As</button>
-      <button on:click={async () => {
-        const json = await serializeVaultJSON();
-        const blob = new Blob([json], { type:'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = 'vault-backup.mvault'; a.click(); URL.revokeObjectURL(a.href);
-        showToast('Backup exported', 'success');
-      }}>Export .mvault</button>
 
-     <!-- <button on:click={save}>Save (re-encrypt)</button>
-      <button on:click={exportVault}>Export .mvault</button>
-     -->
-      <input placeholder="Search" bind:value={filter} />
-    </div>
+<!-- In unlocked header actions, replace Save/Save As with Import/Export only -->
+<div class="actions">
+  <button on:click={addEntry}>Add</button>
+  <label class="import">
+    <span>Import (.mvault)</span>
+    <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
+  </label>
+  <button on:click={onExportClick}>Export .mvault</button>
+  <input placeholder="Search" bind:value={filter} />
+</div>
 
     <table>
       <thead>

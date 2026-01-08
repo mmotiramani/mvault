@@ -73,6 +73,76 @@ export async function createEncryptedPackage(obj: unknown, pass: string) {
   };
 }
 
+
+
+/** Accepts common array shapes and returns Uint8Array. */
+function toUint8(src: number[] | Uint8Array | ArrayBuffer | ArrayLike<number>): Uint8Array {
+  if (src instanceof Uint8Array) return src;
+  if (src instanceof ArrayBuffer) return new Uint8Array(src);
+  if (Array.isArray(src) || (src && typeof (src as any).length === 'number')) {
+    const len = (src as ArrayLike<number>).length as number;
+    const out = new Uint8Array(len);
+    for (let i = 0; i < len; i++) out[i] = ((src as ArrayLike<number>)[i] as number) & 0xff;
+    return out;
+  }
+  throw new TypeError('Unsupported buffer source for toUint8');
+}
+
+
+/**
+ * Robust AES-GCM decrypt for JSON payloads.
+ * Encryption side uses: IV=12 bytes, NO AAD, tag appended in ct.
+ */
+export async function decryptJSON<T>(
+  key: CryptoKey,
+  ivArr: number[] | Uint8Array | ArrayBuffer,
+  ctArr: number[] | Uint8Array | ArrayBuffer,
+  opts?: { label?: string }   // optional: pass item id/name for better error messages
+): Promise<T> {
+  try {
+    if (!key) throw new Error('Missing CryptoKey');
+
+    // Normalize to Uint8Array
+    const iv = ivArr instanceof Uint8Array
+      ? ivArr
+      : ivArr instanceof ArrayBuffer
+      ? new Uint8Array(ivArr)
+      : new Uint8Array(ivArr as number[]);
+
+    if (iv.length !== 12) {
+      throw new Error(`Bad AES-GCM IV length: ${iv.length} (expected 12)`);
+    }
+
+    const ct = ctArr instanceof Uint8Array
+      ? ctArr
+      : ctArr instanceof ArrayBuffer
+      ? new Uint8Array(ctArr)
+      : new Uint8Array(ctArr as number[]);
+
+    if (ct.length < 16) {
+      // GCM outputs ciphertext + 16-byte tag; anything shorter is invalid/corrupt
+      throw new Error(`Ciphertext too short: ${ct.length} (expected ≥ 16 incl. tag)`);
+    }
+
+    // No additionalData (AAD) on encrypt side, so none here
+    const ptBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    const jsonText = dec.decode(new Uint8Array(ptBuf));
+    return JSON.parse(jsonText) as T;
+  } catch (err: any) {
+    const where = opts?.label ? `decryptJSON(${opts.label})` : 'decryptJSON';
+    const msg = err?.message || String(err);
+    throw new Error(`${where} failed: ${msg}`);
+  }
+}
+
+/*
+export async function decryptJSON<T>(key: CryptoKey, ivArr: number[], ctArr: number[]): Promise<T> {
+  const iv = new Uint8Array(ivArr);
+  const ct = new Uint8Array(ctArr);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return JSON.parse(dec.decode(new Uint8Array(pt))) as T;
+}
+
 export async function decryptJSON(pkg: any, pass: string) {
   if (!pkg) throw new Error('Invalid package: empty');
 
@@ -113,3 +183,4 @@ export async function decryptJSON(pkg: any, pass: string) {
     throw new Error('Decryption failed: incorrect passphrase or corrupted package');
   }
 }
+*/
