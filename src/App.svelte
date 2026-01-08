@@ -232,14 +232,17 @@
 
 
   {:else if initStatus === 'ready' && (state === 'new' || state === 'locked')}
-<button on:click={() => openFromFileFSA()}>Open (file)</button>
+
+ <!-- <button on:click={() => openFromFileFSA()}>Open (file)</button>-->
 <label class="import">
-  <span>Import (.mvault)</span>
+  <!-- <span>Import (.mvault)</span> -->
   <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
 </label>
+  
 <button on:click={onExportClick}>Export .mvault</button>
   <section class="home">
-    <h2>Welcome to MVault</h2>
+  <!-- supress all the below code 
+     <h2>Welcome to MVault</h2>
     <div class="actions">
       {#if state === 'locked'}
         <input type="password" placeholder="Master password" bind:value={master} />
@@ -257,13 +260,16 @@
       </label>
       <button on:click={exportVault} disabled={!vaultFile}>Export .mvault</button>
     </div>
-  </section>
+  -->
+    </section>
+  
 {/if}
 
+<!--
 
   {#if initStatus !== 'ready'}
-    <!-- Keep page visible even while initializing or on error -->
-    <p>If this persists, open DevTools (⌘⌥I) & check the console.</p>
+    <p> Keep page visible even while initializing or on error 
+    If this persists, open DevTools (⌘⌥I) & check the console.</p>
   {/if}
 
   {#if state === 'new'}
@@ -283,8 +289,9 @@
     </div>
   {:else}
     <h2>Password Vault</h2>
-
+  -->
 <!-- In unlocked header actions, replace Save/Save As with Import/Export only -->
+<!--
 <div class="actions">
   <button on:click={addEntry}>Add</button>
   <label class="import">
@@ -319,6 +326,7 @@
       </tbody>
     </table>
   {/if}
+  -->
 </main>
 
 <Toast />
