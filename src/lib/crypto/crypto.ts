@@ -125,7 +125,12 @@ export async function decryptJSON<T>(
     }
 
     // No additionalData (AAD) on encrypt side, so none here
-    const ptBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    // Create a concrete ArrayBuffer to avoid SharedArrayBuffer typing issues
+    const ctBuf = new ArrayBuffer(ct.byteLength);
+    new Uint8Array(ctBuf).set(ct);
+    const ivBuf = new ArrayBuffer(iv.byteLength);
+    new Uint8Array(ivBuf).set(iv);
+    const ptBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(ivBuf) }, key, ctBuf);
     const jsonText = dec.decode(new Uint8Array(ptBuf));
     return JSON.parse(jsonText) as T;
   } catch (err: any) {

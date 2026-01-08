@@ -7,7 +7,7 @@
   import { importFromText, exportToDownload } from './lib/bridge/vault-file';
   // ... keep your existing imports and logic (Unlock, VaultList, session, autoLock, etc.)
 
-  import { startAutoLock } from './lib/app/autoLock'; // your file
+  //import { startAutoLock } from './lib/app/autoLock'; // your file
   // ... keep your existing imports (Unlock, VaultList, session, etc.)
 
   import { onMount } from 'svelte';
@@ -137,13 +137,16 @@
 
 
   // optional: autosave on blur/idle for FSA handle
+  /*
   function autosave() {
-    saveVaultFSA().catch(()=>{/* ignore */});
+    saveVaultFSA().catch(()=>{ 
+    // ignore 
+    // });
   }
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') autosave();
   });
-
+*/
 
   function exportVault() {
     if (!vaultFile) return;

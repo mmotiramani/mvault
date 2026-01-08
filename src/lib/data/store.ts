@@ -64,12 +64,14 @@ export async function listItems<T>(key: CryptoKey): Promise<Array<{ item: VaultI
         key,
         i.enc.iv,  // number[] from encryptJSON
         i.enc.ct,  // number[] from encryptJSON
-        { label: i.name ?? String((i as any).id ?? '') }
+        { label: String(i.id ?? '') }
+        //{ label: i.name ?? String((i as any).id ?? '') }
       );
       out.push({ item: i, payload });
     } catch (e: any) {
-      const id = (i as any).id ?? '(no-id)';
-      const name = (i as any).name ?? '(no-name)';
+      const id = i.id ?? '(no-id)';
+      //const name = (payload as any)?.name ?? '(no-name)';
+      const name = '(no-name)';
       const reason = e?.message || String(e);
       // Vaults should fail-fast rather than silently produce partial exports
       throw new Error(`Decrypt failed for item id=${id} name="${name}": ${reason}`);
