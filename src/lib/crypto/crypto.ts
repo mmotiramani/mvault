@@ -52,7 +52,8 @@ export function randIV() {
 }
 
 export async function encryptJSON(key: CryptoKey, obj: unknown) {
-  const iv = randIV();
+  //const iv = randIV();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = enc.encode(JSON.stringify(obj));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
   return {  v: 2, iv: Array.from(iv), ct: Array.from(new Uint8Array(ct)) };

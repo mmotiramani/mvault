@@ -20,6 +20,22 @@
   import { session } from './lib/app/session';
   $: unlocked = !!$session.key;
 
+//passphrase change option
+
+import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
+
+  // local state that controls the dialog visibility
+  let showChangePass = false;
+
+  // OPTIONAL: hotkey to open it quickly (Ctrl/Cmd + Shift + P)
+  function onKeydown(e: KeyboardEvent) {
+    const isCmd = navigator.platform.includes('Mac') ? e.metaKey : e.ctrlKey;
+    if (isCmd && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+      e.preventDefault();
+      showChangePass = true;
+    }
+  }
+
 
   // --- diagnostic state shown on screen ---
   let initStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
@@ -183,6 +199,7 @@
   );
 </script>
 
+
 {#if unlocked}
   <VaultList />
 {:else}
@@ -210,13 +227,40 @@
   }
   .splash img { width: 96px; height: 96px; margin-bottom: .75rem; }
 
-.home { padding: 2rem 0; }
-.home .actions { display:flex; flex-wrap:wrap; gap:.75rem; }
-.import input[type="file"] { display:block; }
+  .home { padding: 2rem 0; }
+  .home .actions { display:flex; flex-wrap:wrap; gap:.75rem; }
+  .import input[type="file"] { display:block; }
+
+  /* ADD: top actions row (mobile-friendly) */
+  .top-actions {
+    display:flex; justify-content:flex-end; gap:.5rem;
+    margin-bottom: .75rem; flex-wrap: wrap;
+  }
+  .link {
+    background: none; border: 1px solid #2a2a2a; color: #ddd;
+    padding:.4rem .6rem; border-radius: 6px;
+  }
+  .link:active { transform: scale(.98); }
+
+  /* ADD: floating action button for passphrase change */
+.fab-change {
+  position: fixed; right: 16px; bottom: 16px; z-index: 1500;
+  background: #0a66c2; color: #fff; border: none;
+  border-radius: 999px; padding: .6rem .9rem; box-shadow: 0 6px 14px rgba(0,0,0,.35);
+}
+.fab-change:active { transform: translateY(1px); }
 
 </style>
 
 <main>
+  <!-- ADD: Show the Change Passphrase button whenever the app is ready (locked or unlocked) -->
+  {#if initStatus === 'ready'}
+    <div class="top-actions">
+      <!-- button class="fab-change" on:click={() => (showChangePass = true)}>Change</button -->
+      <button class="link" on:click={() => (showChangePass = true)}>Change passphrase</button>
+    </div>
+  {/if}
+
   <!-- Diagnostic banner -->
   {#if initStatus === 'loading'}
 
@@ -233,103 +277,22 @@
       {initError}
     </div>
 
-
   {:else if initStatus === 'ready' && (state === 'new' || state === 'locked')}
 
- <!-- <button on:click={() => openFromFileFSA()}>Open (file)</button>-->
-<label class="import">
-  <!-- <span>Import (.mvault)</span> -->
-  <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
-</label>
-  
-<button on:click={onExportClick}>Export .mvault</button>
-  <section class="home">
-  <!-- supress all the below code 
-     <h2>Welcome to MVault</h2>
-    <div class="actions">
-      {#if state === 'locked'}
-        <input type="password" placeholder="Master password" bind:value={master} />
-        <button on:click={unlock} disabled={!master}>Unlock</button>
-      {/if}
+    <!-- <button on:click={() => openFromFileFSA()}>Open (file)</button> -->
+    <label class="import">
+      <!-- <span>Import (.mvault)</span> -->
+      <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
+    </label>
 
-      {#if state === 'new'}
-        <input type="password" placeholder="Set master password" bind:value={master} />
-        <button on:click={createNew} disabled={!master}>Create Vault</button>
-      {/if}
+    <button on:click={onExportClick}>Export .mvault</button>
 
-      <label class="import">
-        <span>Import vault file</span>
-        <input type="file" accept=".mvault,application/json" on:change={importVault} />
-      </label>
-      <button on:click={exportVault} disabled={!vaultFile}>Export .mvault</button>
-    </div>
-  -->
-    </section>
-  
-{/if}
+    <section class="home"></section>
 
-<!--
-
-  {#if initStatus !== 'ready'}
-    <p> Keep page visible even while initializing or on error 
-    If this persists, open DevTools (⌘⌥I) & check the console.</p>
   {/if}
-
-  {#if state === 'new'}
-    <h2>Create new vault</h2>
-    <input type="password" placeholder="Master password (use a long passphrase)"
-           bind:value={master} />
-    <button on:click={createNew} disabled={!master || initStatus!=='ready'}>Create</button>
-    <hr />
-    <p>Or import an existing vault file:</p>
-    <input type="file" accept=".mvault,application/json" on:change={importVault} />
-  {:else if state === 'locked'}
-    <h2>Unlock vault</h2>
-    <input type="password" placeholder="Master password" bind:value={master} />
-    <div class="actions">
-      <button on:click={unlock} disabled={!master || !vaultFile || initStatus!=='ready'}>Unlock</button>
-      <input type="file" accept=".mvault,application/json" on:change={importVault} />
-    </div>
-  {:else}
-    <h2>Password Vault</h2>
-  -->
-<!-- In unlocked header actions, replace Save/Save As with Import/Export only -->
-<!--
-<div class="actions">
-  <button on:click={addEntry}>Add</button>
-  <label class="import">
-    <span>Import (.mvault)</span>
-    <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
-  </label>
-  <button on:click={onExportClick}>Export .mvault</button>
-  <input placeholder="Search" bind:value={filter} />
-</div>
-
-    <table>
-      <thead>
-        <tr><th>App / URL</th><th>Username</th><th>Password</th><th>Notes</th><th>Actions</th></tr>
-      </thead>
-      <tbody>
-        {#each filtered as e (e.id)}
-        <tr>
-          <td>
-            <input placeholder="App name" bind:value={e.app} />
-            <input placeholder="URL" bind:value={e.url} />
-          </td>
-          <td><input placeholder="username" bind:value={e.username} /></td>
-          <td class="row">
-            <input placeholder="password" bind:value={e.password} />
-            <button on:click={() => e.password = generatePassword()}>Generate</button>
-            <button on:click={() => copy(e.password)} disabled={!e.password}>Copy</button>
-          </td>
-          <td><textarea rows="2" bind:value={e.notes}></textarea></td>
-          <td><button on:click={() => removeEntry(e.id)}>Delete</button></td>
-        </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-  -->
 </main>
+
+<!-- ADD: Mount the dialog once at root so it overlays everything -->
+<ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} />
 
 <Toast />

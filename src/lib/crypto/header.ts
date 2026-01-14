@@ -5,6 +5,7 @@ import type { Encrypted, VaultHeader } from '../data/types';
 import { openDBWithSchema, META_STORE } from '../data/db';
 import { encryptJSON } from './crypto';
 
+
 async function metaGet<T>(key: IDBValidKey): Promise<T | undefined> {
   const db = await openDBWithSchema();
   return new Promise((resolve, reject) => {
@@ -26,6 +27,23 @@ async function metaPut<T>(key: IDBValidKey, val: T): Promise<void> {
 }
 
 const META_KEY = 'header';
+
+
+/** Save header inside an existing IDB transaction (atomic with other writes). */
+export function saveHeaderInTx(tx: IDBTransaction, header: VaultHeader) {
+  const store = tx.objectStore(META_STORE);
+  store.put(header, META_KEY);
+}
+
+/** (Optional) Load header inside a transaction if you need in-tx reads. */
+export function getHeaderInTx(tx: IDBTransaction): Promise<VaultHeader | undefined> {
+  return new Promise((resolve, reject) => {
+    const store = tx.objectStore(META_STORE);
+    const req = store.get(META_KEY);
+    req.onsuccess = () => resolve(req.result as VaultHeader | undefined);
+    req.onerror = () => reject(req.error);
+  });
+}
 
 export async function getOrCreateHeader(): Promise<VaultHeader> {
   const existing = await metaGet<VaultHeader>(META_KEY);
