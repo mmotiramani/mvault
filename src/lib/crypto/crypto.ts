@@ -1,4 +1,6 @@
 // src/lib/crypto/crypto.ts
+
+import type { Encrypted } from '../data/types';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -53,7 +55,7 @@ export async function encryptJSON(key: CryptoKey, obj: unknown) {
   const iv = randIV();
   const data = enc.encode(JSON.stringify(obj));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-  return { iv: Array.from(iv), ct: Array.from(new Uint8Array(ct)) };
+  return {  v: 2, iv: Array.from(iv), ct: Array.from(new Uint8Array(ct)) };
 }
 
 /**

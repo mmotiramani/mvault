@@ -4,6 +4,8 @@ import { writable } from 'svelte/store';
 import type { VaultHeader, VaultItemPayload, VaultItem } from '../data/types';
 import { getOrCreateHeader, deriveFromHeader } from '../crypto/header';
 import { listItems } from '../data/store';
+import { hideAll as hideAllReveals } from '../ui/reveal';
+
 
 export type SessionState = {
   header: VaultHeader | null;
@@ -31,6 +33,7 @@ export async function unlock(passphrase: string) {
 }
 
 export function lock() {
+  hideAllReveals();
   session.update((s) => ({ header: s.header, key: null, unlockedAt: null, allTags: [] }));
 }
 

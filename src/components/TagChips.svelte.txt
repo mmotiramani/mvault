@@ -1,13 +1,34 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { session, refreshTags } from '../lib/app/session';
   import type { VaultItem, VaultItemPayload } from '../lib/data/types';
   import { updateItem } from '../lib/data/store';
   import { get } from 'svelte/store';
 
+  
+  /** Two-way bound list of tags (lowercase, deduped) */
+  export let tags: string[] = [];
+
+  /** Optional UX props */
+  export let placeholder = 'Add tag…';
+  export let maxSuggestions = 8;
+
   export let item: VaultItem;
   export let payload: VaultItemPayload;
+
   const dispatch = createEventDispatcher<{ changed: VaultItemPayload }>();
+
+
+  // Global unique tags across the vault (maintained by session)
+  let allTags: string[] = [];
+  const unsub = session.subscribe(s => { allTags = s.allTags || []; });
+
+  
+  // Input & suggestions state
+  let q = '';
+  let show = false;        // dropdown visibility
+  let activeIdx = -1;      // keyboard focus within suggestions
+  let inputEl: HTMLInputElement | null = null;
 
   const MAX_LEN = 32;
   let input = '';

@@ -1,0 +1,452 @@
+@startuml MU-B2BSDN-MobileUnderlay-UC
+ 
+'author Sangita Agarwal
+'date 05-Jan-2026
+'version 1.0
+'Lead to Fulfillment to Billing - Use Case Diagram
+ 
+skinparam {
+  TitleFontName "Calibri"
+  TitleFontSize 18
+  TitleFontColor #003366
+}
+ 
+title
+ 
+<b>Lead to Fulfillment to Billing - Use Case Diagram</b>
+<font size=12><i>End-to-End Business Process Activity Flow</i></font>
+ 
+end title
+ 
+skinparam FooterFontColor #666666
+skinparam FooterFontSize 12
+skinparam FooterFontName Calibri
+ 
+footer
+ 
+<font size=12>Activity Diagram</font>
+<font size=10>Version: 1.0 | Author: Sangita Agarwal ( E2E B2B Solution Architect ) | Last Updated: 05-Jan-2026</font>
+ 
+end footer
+ 
+skinparam activity {
+  BackgroundColor White
+  BorderColor Black
+  FontName Calibri
+  FontSize 10
+}
+ 
+skinparam decision {
+  BackgroundColor #FFFFCC
+  BorderColor #FF6600
+  FontName Calibri
+  FontSize 10
+}
+ 
+skinparam note {
+  BackgroundColor #E6F3FF
+  BorderColor #0066CC
+  FontName Calibri
+  FontSize 9
+}
+ 
+skinparam swimlane {
+  BorderColor Black
+  TitleBackgroundColor LightGray
+  TitleFontName Calibri
+  TitleFontSize 12
+}
+ 
+|Customer|
+start
+ 
+:Create Business Opportunity;
+note right
+  Customer initiates
+  business request
+end note
+ 
+|Sales Team (ATK)|
+:Receive Opportunity;
+:Initiate Offer Process;
+ 
+|SMART-SB (CLM)|
+:Process Standard Offer;
+ 
+if (Standard Order?) then (no)
+  |Panda System|
+  :Design Custom Solution;
+  :Update CLM Configuration;
+else (yes)
+  :Continue Standard Processing;
+endif
+ 
+|SMART-SB (CLM)|
+:Present Offer to Customer;
+ 
+|Customer|
+if (Accept Offer?) then (no)
+  :Reject Offer;
+  stop
+else (yes)
+  :Accept Offer;
+endif
+ 
+|SMART-SB (CLM)|
+:Submit Order;
+ 
+|Secure Networking|
+:Validate Order;
+:Orchestrate Workflow;
+ 
+partition "Procurement & Logistics" {
+  |Secure Networking|
+  fork
+    |OFI System|
+    :Initiate Procurement;
+    :Manage Suppliers;
+    :Confirm Procurement;
+  fork again
+    |RCS (OPC)|
+    :Process Hardware Order;
+    
+    |DMS System|
+    :Plan Delivery;
+    :Manage Logistics;
+    :Confirm Delivery;
+  end fork
+}
+ 
+|Secure Networking|
+:Send Activation Request;
+ 
+|BSP System|
+:Receive Activation Request;
+ 
+|Carmen System|
+:Activate Service;
+ 
+|Conan System|
+:Configure Network;
+:Provision Service;
+ 
+|Carmen System|
+:Complete Activation;
+:Notify Customer;
+ 
+|Customer|
+:Validate Service;
+ 
+partition "Billing Process" {
+  |Carmen System|
+  :Send Usage Data;
+  
+  |SAP BRIM|
+  :Process Billing;
+  :Rate Services;
+  
+  |SAP P02|
+  :Validate Financials;
+  :Post to Accounting;
+  :Confirm Billing;
+  
+  |SAP BRIM|
+  :Generate Invoice;
+  
+  |Customer|
+  :Receive Invoice;
+}
+ 
+partition "Assurance & Inventory" {
+  |Secure Networking|
+  :Update Assurance Inventory;
+  
+  |PMA-ISEM|
+  :Receive Inventory Data;
+  
+  |SAP BRIM|
+  :Send Billing Events;
+  
+  |B2B Assurance|
+  :Correlate Assurance Data;
+  :Process Service Events;
+  
+  |PMA-ISEM|
+  :Reconcile Inventory;
+  :Complete Process;
+}
+ 
+'note over Customer "PMA-ISEM"
+'  <color:blue><b>End-to-End Process Complete</b></color>
+''  Lead → Offer → Order → Fulfillment → Billing → Assurance
+'end note
+ 
+stop
+ 
+@enduml
+ 
+Use Case Diagram
+ 
+@startuml Lead-to-Fulfillment-Billing-UseCaseDiagram-ReadableColors
+ 
+author Sangita Agarwal
+'date 05-Jan-2026
+'version 2.0
+'Lead to Fulfillment to Billing - Use Case Diagram with Readable Color Format
+ 
+skinparam {
+  TitleFontName "Calibri"
+  TitleFontSize 20
+  TitleFontColor #003366
+  TitleBackgroundColor #F0F8FF
+  TitleBorderColor #4682B4
+}
+ 
+title
+ 
+<b>Lead to Fulfillment to Billing</b>
+<font size=14><i>End-to-End Business Process - Readable Color Format</i></font>
+ 
+end title
+ 
+skinparam FooterFontColor #555555
+skinparam FooterFontSize 12
+skinparam FooterFontName Calibri
+ 
+footer
+ 
+<font size=12>Use Case Diagram - Enhanced Readability</font>
+<font size=10>Version: 2.0 | Author: Sangita Agarwal ( E2E B2B Solution Architect ) | Last Updated: 05-Jan-2026</font>
+ 
+end footer
+ 
+left to right direction
+ 
+'====================
+' Enhanced Color Scheme for Better Readability
+'====================
+' Light Green: Sales & Opportunity Management
+' Sky Blue: Order Processing & Orchestration  
+' Light Purple: Procurement & Logistics
+' Light Orange: Service Activation & Provisioning
+' Light Pink: Billing & Financial Management
+' Light Cyan: Assurance & Inventory Management
+' Light Gray: Supporting Systems
+ 
+skinparam usecase {
+  FontName Calibri
+  FontSize 11
+  FontColor Black
+  BorderThickness 2
+}
+ 
+skinparam rectangle {
+  FontName Calibri
+  FontSize 12
+  FontStyle bold
+  BorderThickness 2
+}
+ 
+skinparam actor {
+  FontName Calibri
+  FontSize 12
+  FontStyle bold
+}
+ 
+'====================
+' Actors with Enhanced Colors
+'====================
+skinparam actorStyle awesome
+actor "🏢 Customer" as Customer #FFD700
+actor "💼 Sales Team" as Sales #228B22
+actor "🔧 Network Engineer" as NetEng #4169E1
+actor "📦 Procurement Manager" as ProcMgr #8A2BE2
+actor "⚙️ Service Technician" as ServiceTech #FF8C00
+actor "💰 Finance Team" as Finance #DC143C
+actor "📊 Assurance Analyst" as Assurance #20B2AA
+ 
+'====================
+' Sales & Opportunity Management (Light Green)
+'====================
+rectangle "🛍️ Sales & Opportunity Management" #E6FFE6 {
+  usecase "Create Business\nOpportunity" as UC_CREATE_OPP #90EE90
+  usecase "Initiate Offer\nProcess" as UC_INIT_OFFER #90EE90
+  usecase "Process Standard\nOffer" as UC_STD_OFFER #90EE90
+  usecase "Design Custom\nSolution" as UC_CUSTOM_SOL #98FB98
+  usecase "Present Offer" as UC_PRESENT #90EE90
+  usecase "Accept/Reject\nOffer" as UC_ACCEPT #90EE90
+}
+ 
+'====================
+' Order Processing & Orchestration (Sky Blue)
+'====================
+rectangle "📋 Order Processing & Orchestration" #E6F3FF {
+  usecase "Submit Order" as UC_SUBMIT_ORDER #87CEEB
+  usecase "Validate Order" as UC_VALIDATE #87CEEB
+  usecase "Orchestrate\nWorkflow" as UC_ORCHESTRATE #87CEEB
+}
+ 
+'====================
+' Procurement & Logistics (Light Purple)
+'====================
+rectangle "🚚 Procurement & Logistics" #F0E6FF {
+  usecase "Initiate\nProcurement" as UC_PROCUREMENT #DDA0DD
+  usecase "Manage\nSuppliers" as UC_SUPPLIERS #DDA0DD
+  usecase "Process Hardware\nOrder" as UC_HARDWARE #DDA0DD
+  usecase "Plan Delivery" as UC_DELIVERY #DDA0DD
+  usecase "Manage\nLogistics" as UC_LOGISTICS #DDA0DD
+}
+ 
+'====================
+' Service Activation & Provisioning (Light Orange)
+'====================
+rectangle "🔌 Service Activation & Provisioning" #FFF4E6 {
+  usecase "Receive Activation\nRequest" as UC_REC_ACTIVATION #FFB347
+  usecase "Activate Service" as UC_ACTIVATE #FFB347
+  usecase "Configure\nNetwork" as UC_CONFIG_NET #FFB347
+  usecase "Provision Service" as UC_PROVISION #FFB347
+  usecase "Validate Service" as UC_VALIDATE_SVC #FFB347
+}
+ 
+'====================
+' Billing & Financial Management (Light Pink)
+'====================
+rectangle "💳 Billing & Financial Management" #FFE6F0 {
+  usecase "Send Usage Data" as UC_USAGE_DATA #FFB6C1
+  usecase "Process Billing" as UC_PROCESS_BILL #FFB6C1
+  usecase "Rate Services" as UC_RATE #FFB6C1
+  usecase "Validate\nFinancials" as UC_VALIDATE_FIN #FFB6C1
+  usecase "Generate Invoice" as UC_INVOICE #FFB6C1
+  usecase "Receive Invoice" as UC_REC_INVOICE #FFB6C1
+}
+ 
+'====================
+' Assurance & Inventory Management (Light Cyan)
+'====================
+rectangle "📈 Assurance & Inventory Management" #E0FFFF {
+  usecase "Update Assurance\nInventory" as UC_UPDATE_INV #AFEEEE
+  usecase "Correlate Assurance\nData" as UC_CORRELATE #AFEEEE
+  usecase "Process Service\nEvents" as UC_SVC_EVENTS #AFEEEE
+  usecase "Reconcile\nInventory" as UC_RECONCILE #AFEEEE
+}
+ 
+'====================
+' External Systems (Light Gray)
+'====================
+rectangle "🖥️ Supporting Systems" #F5F5F5 {
+  usecase "ATK\n(MyWorkplace)" as SYS_ATK #D3D3D3
+  usecase "SMART-SB\n(CLM)" as SYS_CLM #D3D3D3
+  usecase "Panda System" as SYS_PANDA #D3D3D3
+  usecase "Secure\nNetworking" as SYS_SN #D3D3D3
+  usecase "OFI System" as SYS_OFI #D3D3D3
+  usecase "RCS (OPC)" as SYS_RCS #D3D3D3
+  usecase "DMS System" as SYS_DMS #D3D3D3
+  usecase "BSP System" as SYS_BSP #D3D3D3
+  usecase "Carmen System" as SYS_CARMEN #D3D3D3
+  usecase "Conan System" as SYS_CONAN #D3D3D3
+  usecase "SAP BRIM" as SYS_BRIM #D3D3D3
+  usecase "SAP P02" as SYS_P02 #D3D3D3
+  usecase "B2B Assurance" as SYS_B2B #D3D3D3
+  usecase "PMA-ISEM" as SYS_ISEM #D3D3D3
+}
+ 
+'====================
+' Actor Relationships - Color Coded Arrows
+'====================
+ 
+' Customer interactions (Gold arrows)
+Customer -[#FFD700]-> UC_CREATE_OPP : Initiates
+Customer -[#FFD700]-> UC_ACCEPT : Decides
+Customer -[#FFD700]-> UC_VALIDATE_SVC : Validates
+Customer -[#FFD700]-> UC_REC_INVOICE : Receives
+ 
+' Sales Team interactions (Green arrows)
+Sales -[#228B22]-> UC_INIT_OFFER : Initiates
+Sales -[#228B22]-> UC_PRESENT : Presents
+ 
+' Network Engineer interactions (Blue arrows)
+NetEng -[#4169E1]-> UC_VALIDATE : Validates
+NetEng -[#4169E1]-> UC_ORCHESTRATE : Orchestrates
+NetEng -[#4169E1]-> UC_CONFIG_NET : Configures
+ 
+' Procurement Manager interactions (Purple arrows)
+ProcMgr -[#8A2BE2]-> UC_PROCUREMENT : Manages
+ProcMgr -[#8A2BE2]-> UC_SUPPLIERS : Manages
+ProcMgr -[#8A2BE2]-> UC_LOGISTICS : Oversees
+ 
+' Service Technician interactions (Orange arrows)
+ServiceTech -[#FF8C00]-> UC_ACTIVATE : Performs
+ServiceTech -[#FF8C00]-> UC_PROVISION : Provisions
+ 
+' Finance Team interactions (Red arrows)
+Finance -[#DC143C]-> UC_PROCESS_BILL : Processes
+Finance -[#DC143C]-> UC_VALIDATE_FIN : Validates
+Finance -[#DC143C]-> UC_INVOICE : Generates
+ 
+' Assurance Analyst interactions (Teal arrows)
+Assurance -[#20B2AA]-> UC_UPDATE_INV : Updates
+Assurance -[#20B2AA]-> UC_CORRELATE : Correlates
+Assurance -[#20B2AA]-> UC_RECONCILE : Reconciles
+ 
+'====================
+' Use Case Relationships - Enhanced Visibility
+'====================
+ 
+' Sequential flow relationships (Thick blue dotted lines)
+UC_CREATE_OPP .[#4169E1,thickness=2].> UC_INIT_OFFER : <<include>>
+UC_INIT_OFFER .[#4169E1,thickness=2].> UC_STD_OFFER : <<include>>
+UC_STD_OFFER .[#FF8C00,thickness=2].> UC_CUSTOM_SOL : <<extend>>
+UC_STD_OFFER .[#4169E1,thickness=2].> UC_PRESENT : <<include>>
+UC_ACCEPT .[#4169E1,thickness=2].> UC_SUBMIT_ORDER : <<include>>
+UC_SUBMIT_ORDER .[#4169E1,thickness=2].> UC_VALIDATE : <<include>>
+UC_VALIDATE .[#4169E1,thickness=2].> UC_ORCHESTRATE : <<include>>
+ 
+' Parallel processes (Green dotted lines)
+UC_ORCHESTRATE .[#228B22,thickness=2].> UC_PROCUREMENT : <<include>>
+UC_ORCHESTRATE .[#228B22,thickness=2].> UC_HARDWARE : <<include>>
+UC_PROCUREMENT .[#FF8C00,thickness=2].> UC_REC_ACTIVATION : <<include>>
+UC_HARDWARE .[#FF8C00,thickness=2].> UC_REC_ACTIVATION : <<include>>
+ 
+' Service activation flow (Orange dotted lines)
+UC_REC_ACTIVATION .[#FF8C00,thickness=2].> UC_ACTIVATE : <<include>>
+UC_ACTIVATE .[#FF8C00,thickness=2].> UC_CONFIG_NET : <<include>>
+UC_CONFIG_NET .[#FF8C00,thickness=2].> UC_PROVISION : <<include>>
+UC_PROVISION .[#FF8C00,thickness=2].> UC_VALIDATE_SVC : <<include>>
+ 
+' Billing flow (Red dotted lines)
+UC_VALIDATE_SVC .[#DC143C,thickness=2].> UC_USAGE_DATA : <<include>>
+UC_USAGE_DATA .[#DC143C,thickness=2].> UC_PROCESS_BILL : <<include>>
+UC_PROCESS_BILL .[#DC143C,thickness=2].> UC_INVOICE : <<include>>
+ 
+' Assurance flow (Teal dotted lines)
+UC_PROVISION .[#20B2AA,thickness=2].> UC_UPDATE_INV : <<include>>
+UC_PROCESS_BILL .[#20B2AA,thickness=2].> UC_CORRELATE : <<include>>
+UC_CORRELATE .[#20B2AA,thickness=2].> UC_RECONCILE : <<include>>
+ 
+'====================
+' System Integrations - Dashed Gray Lines
+'====================
+UC_INIT_OFFER -[#808080,dashed]-> SYS_ATK : Uses
+UC_STD_OFFER -[#808080,dashed]-> SYS_CLM : Uses
+UC_CUSTOM_SOL -[#808080,dashed]-> SYS_PANDA : Uses
+UC_ORCHESTRATE -[#808080,dashed]-> SYS_SN : Uses
+UC_PROCUREMENT -[#808080,dashed]-> SYS_OFI : Uses
+UC_HARDWARE -[#808080,dashed]-> SYS_RCS : Uses
+UC_LOGISTICS -[#808080,dashed]-> SYS_DMS : Uses
+UC_REC_ACTIVATION -[#808080,dashed]-> SYS_BSP : Uses
+UC_ACTIVATE -[#808080,dashed]-> SYS_CARMEN : Uses
+UC_CONFIG_NET -[#808080,dashed]-> SYS_CONAN : Uses
+UC_PROCESS_BILL -[#808080,dashed]-> SYS_BRIM : Uses
+UC_VALIDATE_FIN -[#808080,dashed]-> SYS_P02 : Uses
+UC_CORRELATE -[#808080,dashed]-> SYS_B2B : Uses
+UC_RECONCILE -[#808080,dashed]-> SYS_ISEM : Uses
+ 
+'====================
+' Enhanced Color Legend with Emojis
+'====================
+note "🎨 <b>Readable Color Legend</b>\n\n🛍️ <color:#90EE90><b>Sales & Opportunity (Light Green)</b></color>\n📋 <color:#87CEEB><b>Order Processing (Sky Blue)</b></color>\n🚚 <color:#DDA0DD><b>Procurement & Logistics (Light Purple)</b></color>\n🔌 <color:#FFB347><b>Service Activation (Light Orange)</b></color>\n💳 <color:#FFB6C1><b>Billing & Financial (Light Pink)</b></color>\n📈 <color:#AFEEEE><b>Assurance & Inventory (Light Cyan)</b></color>\n🖥️ <color:#D3D3D3><b>Supporting Systems (Light Gray)</b></color>\n\n<b>Arrow Colors match Actor roles</b>" as LEGEND
+ 
+LEGEND .. UC_CREATE_OPP
+ 
+@enduml
+ 
