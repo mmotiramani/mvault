@@ -1,8 +1,10 @@
 
 // src/lib/crypto/header.ts
 import { DEFAULT_ITERATIONS } from './crypto';
-import type { VaultHeader } from '../data/types';
+import type { Encrypted, VaultHeader } from '../data/types';
 import { openDBWithSchema, META_STORE } from '../data/db';
+import { encryptJSON } from './crypto';
+
 
 async function metaGet<T>(key: IDBValidKey): Promise<T | undefined> {
   const db = await openDBWithSchema();
@@ -26,6 +28,23 @@ async function metaPut<T>(key: IDBValidKey, val: T): Promise<void> {
 
 const META_KEY = 'header';
 
+
+/** Save header inside an existing IDB transaction (atomic with other writes). */
+export function saveHeaderInTx(tx: IDBTransaction, header: VaultHeader) {
+  const store = tx.objectStore(META_STORE);
+  store.put(header, META_KEY);
+}
+
+/** (Optional) Load header inside a transaction if you need in-tx reads. */
+export function getHeaderInTx(tx: IDBTransaction): Promise<VaultHeader | undefined> {
+  return new Promise((resolve, reject) => {
+    const store = tx.objectStore(META_STORE);
+    const req = store.get(META_KEY);
+    req.onsuccess = () => resolve(req.result as VaultHeader | undefined);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 export async function getOrCreateHeader(): Promise<VaultHeader> {
   const existing = await metaGet<VaultHeader>(META_KEY);
   if (existing) return existing;
@@ -41,4 +60,18 @@ export async function getOrCreateHeader(): Promise<VaultHeader> {
 export async function deriveFromHeader(passphrase: string, header: VaultHeader): Promise<CryptoKey> {
   const { deriveKey } = await import('./crypto');
   return deriveKey(passphrase, new Uint8Array(header.kdf.salt), header.kdf.iterations);
+}
+
+
+export async function saveHeader(header: VaultHeader): Promise<void> {
+  await metaPut(META_KEY, header);
+}
+
+/** Create a small canary encrypted with the passphrase-derived key and persist it. */
+export async function ensureCanary(header: VaultHeader, key: CryptoKey): Promise<VaultHeader> {
+  if (header.canary) return header;
+  const c: Encrypted = { v: (number)2, ...(await encryptJSON(key, { m: 'MVault-canary' })) };
+  const out: VaultHeader = { ...header, canary: c };
+  await saveHeader(out);
+  return out;
 }

@@ -69,9 +69,21 @@ export async function saveHeader(header: VaultHeader): Promise<void> {
 
 /** Create a small canary encrypted with the passphrase-derived key and persist it. */
 export async function ensureCanary(header: VaultHeader, key: CryptoKey): Promise<VaultHeader> {
-  if (header.canary) return header;
-  const c: Encrypted = { v: 2, ...(await encryptJSON(key, { m: 'MVault-canary' })) };
-  const out: VaultHeader = { ...header, canary: c };
-  await saveHeader(out);
-  return out;
+
+// BEFORE
+// if (header.canary) return header;
+// const c: Encrypted = { v: 2, ...(await encryptJSON(key, { m: 'MVault-canary' })) };
+// const out: VaultHeader = { ...header, canary: c };
+
+// AFTER
+if (header.canary) return header;
+// destructure to avoid spreading a possibly-typed object with v
+const sealed = await encryptJSON(key, { m: 'MVault-canary' }); // typically { iv, ct }
+const iv = Array.isArray((sealed as any).iv) ? (sealed as any).iv : Array.from((sealed as any).iv);
+const ct = Array.isArray((sealed as any).ct) ? (sealed as any).ct : Array.from((sealed as any).ct);
+const c: Encrypted = { v: 2 as const, iv, ct };
+const out: VaultHeader = { ...header, canary: c };
+await saveHeader(out);
+return out;
+
 }

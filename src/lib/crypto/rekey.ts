@@ -106,9 +106,19 @@ export async function rekeyVault(opts: RekeyOptions): Promise<{ header: VaultHea
   startRekey('reencrypt', total, 'Re-encrypting items…');
   const updatedItems: VaultItem[] = new Array(items.length);
   for (let i = 0; i < decrypted.length; i++) {
+
+    // BEFORE
+    // const { item, payload } = decrypted[i];
+    // const enc: Encrypted = await encryptJSON(newKey, payload); // { v:2, iv, ct }
+    // updatedItems[i] = { ...item, enc, updatedAt: Date.now() };
+
+    // AFTER
     const { item, payload } = decrypted[i];
-    const enc: Encrypted = await encryptJSON(newKey, payload); // { v:2, iv, ct }
+    const sealed = await encryptJSON(newKey, payload); // -> { iv, ct }
+    const toNumArray = (x: Uint8Array | number[]) => (Array.isArray(x) ? x : Array.from(x));
+    const enc: Encrypted = { v: 2 as const, iv: toNumArray((sealed as any).iv), ct: toNumArray((sealed as any).ct) };
     updatedItems[i] = { ...item, enc, updatedAt: Date.now() };
+    
     updateRekey('reencrypt', i + 1, total, 'Re-encrypting items…');
     onProgress?.('reencrypt', i + 1, total);
   }

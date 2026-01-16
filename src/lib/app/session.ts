@@ -1,6 +1,6 @@
 
 // src/lib/app/session.ts
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import type { VaultHeader, VaultItemPayload, VaultItem } from '../data/types';
 import { getOrCreateHeader, deriveFromHeader, ensureCanary, saveHeader } from '../crypto/header';
 import { listItems, txAll } from '../data/store';
@@ -18,10 +18,16 @@ import { decryptJSON } from '../crypto/crypto';
 
 export async function changePassphrase(newPass: string, currentPass?: string): Promise<void> {
   // Snapshot current state
-  let sVal: SessionState | null = null;
-  session.update(s => (sVal = s, s));
 
+    // BEFORE
+    // let sVal: SessionState | null = null;
+    // session.update(s => (sVal = s, s));
+    // const isLocked = !sVal?.key;
+
+    // AFTER
+  const sVal = get(session);
   const isLocked = !sVal?.key;
+
   try {
     // Kick progress UI into gear (phase will be updated by rekeyVault)
     startRekey('decrypt', 0, 'Preparing…');
