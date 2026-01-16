@@ -167,6 +167,10 @@ export async function importFromText(text: string, passphrase: string, replace =
     const parsed = JSON.parse(text) as { header: VaultHeader; items: AnyItem[] };
     const { header, items } = parsed;
 
+
+    // collect tags while importing (single update at the end)
+    const tagSet = new Set<string>();
+
     // 1) Validate passphrase using FILE header canary
     const key = await validatePassphrase(header, items as any, passphrase);
 
@@ -227,6 +231,9 @@ export async function importFromText(text: string, passphrase: string, replace =
         payload = src as VaultItemPayload;
       }
 
+      // collect tags from this payload
+      for (const t of payload.tags ?? []) tagSet.add(String(t).toLowerCase());
+
       // Encrypt payload for DB
       const sealed = await encryptJSON(key, payload);       // -> { iv, ct } as Uint8Array | number[]
       const enc: Encrypted = { v: 2 as const, iv: toNumArray((sealed as any).iv), ct: toNumArray((sealed as any).ct) };
@@ -259,10 +266,13 @@ export async function importFromText(text: string, passphrase: string, replace =
     });
     console.debug('[mvault] importFromText → items in store:', count);
 
+   // finalize tags once
+    const allTags = Array.from(tagSet).sort();
+
     db.close();
 
     // 6) Keep the app unlocked with the imported key/header
-    session.update((s: any) => ({ ...s, key, header: ensuredHeader }));
+    session.update((s: any) => ({ ...s, key, header: ensuredHeader, allTags }));
 
     showToast(replace ? 'Vault replaced from file' : 'Vault merged from file', 'success');
   } catch (e: any) {

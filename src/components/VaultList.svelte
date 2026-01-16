@@ -39,6 +39,8 @@ async function refresh() {
   entries = all.sort((a, b) =>
     (a.payload?.name ?? '').localeCompare(b.payload?.name ?? '', undefined, { sensitivity: 'base' })
   );
+
+  
   }
 
   $: visible = entries.filter(({ payload }) => {

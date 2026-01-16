@@ -125,7 +125,8 @@
       entry = { item: updatedItem, payload: next };
       isDirty = false;
       hideAll();           // re-mask password
-      await refreshTags(); // recompute tag cache
+      // refreshTag already ahppenign in updateItem hecne no need here.
+      // await refreshTags(); // recompute tag cache
 
       // Notify parent in case it needs to refresh list
       dispatch('updated', { id: updatedItem.id, item: updatedItem, payload: next });
@@ -246,6 +247,7 @@
         <input
           type={$revealedId === entry.item.id ? 'text' : 'password'}
           bind:value={password}
+          on:input={markDirty}
           on:blur={() => hideAll()}
         />
         <!-- Toggle on press-and-hold: reveal on press, hide on release/leave -->
@@ -265,7 +267,6 @@
           on:click={() => toggleReveal(entry.item.id, { autoHideMs: REVEAL_MS })}
           title="Click to reveal"
         >👁️</button>
-
         <button on:click={onCopyPassword} title="Copy password">📋</button>
       </div>
       {#if $revealedId === entry.item.id}

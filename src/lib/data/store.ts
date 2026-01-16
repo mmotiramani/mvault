@@ -167,6 +167,40 @@ export function validatePayload(p: VaultItemPayload): ValidationError[] {
   return errors;
 }
 
+
+export async function updateItemPayload(
+  item: VaultItem,
+  next: VaultItemPayload,
+  key: CryptoKey
+): Promise<VaultItem> {
+  if (!key) throw new Error('Locked: no session key');
+
+  // Optional sanity: verify the key can decrypt current item
+  await decryptJSON<VaultItemPayload>(key, item.enc.iv, item.enc.ct, { label: item.id ?? String((item as any).id ?? '') });
+
+  // Normalize + validate (keeps your current rules)
+  const clean: VaultItemPayload = {
+    name: (next.name ?? '').trim(),
+    username: (next.username ?? '').trim(),
+    password: next.password ?? '',
+    url: normalizeUrl(next.url),
+    tags: sanitizeTags(next.tags),
+    notes: next.notes ?? ''
+  };
+  const errs = validatePayload(clean);
+  if (errs.length) {
+    const e: any = new Error('invalid-payload');
+    e.code = 'invalid-payload';
+    e.errors = errs;
+    throw e;
+  }
+
+  // Delegate the actual encrypt+persist to updateItem (preserves id & createdAt)
+  return updateItem(key, item, clean);
+}
+
+/*
+
 export async function updateItemPayload(
   item: VaultItem,
   next: VaultItemPayload,
@@ -204,3 +238,4 @@ export async function updateItemPayload(
   await putItem(updated);
   return updated;
 }
+*/
