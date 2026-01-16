@@ -23,7 +23,7 @@ async function txDel(db: IDBDatabase, key: IDBValidKey) {
   });
 }
 
-async function txAll<T>(db: IDBDatabase) {
+export async function txAll<T>(db: IDBDatabase) {
   return new Promise<T[]>((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE, 'readonly');
     const req = tx.objectStore(ITEMS_STORE).getAll();
@@ -54,36 +54,44 @@ export async function listItems<T>(key: CryptoKey): Promise<Array<{ item: VaultI
 
 export async function listItems<T>(key: CryptoKey): Promise<Array<{ item: VaultItem; payload: T }>> {
   const db = await openDBWithSchema();
-  const all = await txAll<VaultItem>(db);
+  const all = await txAll<VaultItem>(db);  // assumes this reads from the same ITEMS_STORE
   db.close();
 
+  console.debug('[mvault] listItems: raw rows from DB =', all.length);
+
   const out: Array<{ item: VaultItem; payload: T }> = [];
+  const FAIL_FAST = true; // set to false to skip bad rows instead of throwing
+
+  // small helper to ensure Uint8Array for decrypt
+  const toU8 = (x: number[] | Uint8Array | ArrayBuffer) =>
+    x instanceof Uint8Array ? x : x instanceof ArrayBuffer ? new Uint8Array(x) : new Uint8Array(x);
 
   for (const i of all) {
     try {
       const payload = await decryptJSON<T>(
         key,
-        i.enc.iv,  // number[] from encryptJSON
-        i.enc.ct,  // number[] from encryptJSON
+        toU8(i.enc.iv),
+        toU8(i.enc.ct),
         { label: String(i.id ?? '') }
-        //{ label: i.name ?? String((i as any).id ?? '') }
       );
       out.push({ item: i, payload });
     } catch (e: any) {
-      const id = i.id ?? '(no-id)';
-      //const name = (payload as any)?.name ?? '(no-name)';
-      const name = '(no-name)';
       const reason = e?.message || String(e);
-      // Vaults should fail-fast rather than silently produce partial exports
-      throw new Error(`Decrypt failed for item id=${id} name="${name}": ${reason}`);
-      // If you prefer to skip bad items and continue:
-      // console.error('Decrypt failed', { id, name, error: e });
-      // continue;
+      const msg = `Decrypt failed for id=${String(i.id ?? '')}: ${reason}`;
+      if (FAIL_FAST) {
+        console.error('[mvault]', msg);
+        throw new Error(msg);
+      } else {
+        console.warn('[mvault]', msg, '(skipping row)');
+        continue;
+      }
     }
   }
 
+  console.debug('[mvault] listItems: decrypted rows =', out.length);
   return out;
 }
+
 
 
 export async function updateItem<T>(key: CryptoKey, i: VaultItem, payload: T): Promise<VaultItem> {

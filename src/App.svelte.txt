@@ -1,6 +1,17 @@
 <script lang="ts">
+
+  import Toast from './lib/ui/Toast.svelte';
+  import { showToast } from './lib/ui/toast';
+ // import { openFromFileFSA, saveVaultFSA, saveVaultAsFSA, serializeVaultJSON } from './lib/bridge/vault-file';
+  
+  import { importFromText, exportToDownload } from './lib/bridge/vault-file';
+  // ... keep your existing imports and logic (Unlock, VaultList, session, autoLock, etc.)
+
+  //import { startAutoLock } from './lib/app/autoLock'; // your file
+  // ... keep your existing imports (Unlock, VaultList, session, etc.)
+
   import { onMount } from 'svelte';
-  import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
+  //import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
   import { createVaultFile, openVaultFile, type VaultFile, type VaultData } from './lib/vault';
   import { generatePassword } from './lib/utils/passwords';
 
@@ -8,6 +19,23 @@
   import VaultList from './components/VaultList.svelte';
   import { session } from './lib/app/session';
   $: unlocked = !!$session.key;
+
+//passphrase change option
+
+import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
+
+  // local state that controls the dialog visibility
+  let showChangePass = false;
+
+  // OPTIONAL: hotkey to open it quickly (Ctrl/Cmd + Shift + P)
+  function onKeydown(e: KeyboardEvent) {
+    const isCmd = navigator.platform.includes('Mac') ? e.metaKey : e.ctrlKey;
+    if (isCmd && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+      e.preventDefault();
+      showChangePass = true;
+    }
+  }
+
 
   // --- diagnostic state shown on screen ---
   let initStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
@@ -30,7 +58,7 @@
       console.log('libsodium loaded; version major=', sodium.default.SODIUM_LIBRARY_VERSION_MAJOR );
 
       // Load any existing vault
-      vaultFile = await loadVaultFile();
+      //vaultFile = await loadVaultFile();
       state = vaultFile ? 'locked' : 'new';
       initStatus = 'ready';
 
@@ -52,7 +80,7 @@
   async function createNew() {
     try {
       const vf = await createVaultFile(master, { entries: [] });
-      await saveVaultFile(vf);
+      //await saveVaultFile(vf);
       vaultFile = vf;
       data = { entries: [] };
       state = 'unlocked';
@@ -84,11 +112,29 @@
     data.entries = data.entries.filter(e => e.id !== id);
   }
 
+
+  async function onImportUpload(ev: Event) {
+    const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
+    const pass = prompt('Enter passphrase to import:'); if (!pass) return;
+    const text = await file.text();
+    // Default MERGE; allow REPLACE if user confirms
+    const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
+    await importFromText(text, pass, replace);
+    (ev.target as HTMLInputElement).value = ''; // reset input
+  }
+
+
+  async function onExportClick() {
+    console.log('goingto call exportToDownload');
+    await exportToDownload('vault.mvault');
+  }
+
+
   async function save() {
     try {
       if (!master) return;
       const vf = await createVaultFile(master, data);
-      await saveVaultFile(vf);
+      //await saveVaultFile(vf);
       vaultFile = vf;
       alert('Saved');
     } catch (e) {
@@ -104,6 +150,19 @@
       await navigator.clipboard.writeText(blank);
     }, 15000);
   }
+
+
+  // optional: autosave on blur/idle for FSA handle
+  /*
+  function autosave() {
+    saveVaultFSA().catch(()=>{ 
+    // ignore 
+    // });
+  }
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') autosave();
+  });
+*/
 
   function exportVault() {
     if (!vaultFile) return;
@@ -122,7 +181,7 @@
     reader.onload = async () => {
       try {
         const vf = JSON.parse(String(reader.result)) as VaultFile;
-        await saveVaultFile(vf);
+        //await saveVaultFile(vf);
         vaultFile = vf;
         state = 'locked';
         master = '';
@@ -138,13 +197,48 @@
   $: filtered = data.entries.filter(e =>
     [e.app, e.url, e.username].join(' ').toLowerCase().includes(filter.toLowerCase())
   );
+
+
+// Kebab menu state + refs
+  let showMenu = false;
+  let menuWrapEl: HTMLElement | null = null;
+  let importInputEl: HTMLInputElement | null = null;
+
+  function onKebabClick() {
+    showMenu = !showMenu;
+  }
+  function closeMenu() {
+    showMenu = false;
+  }
+
+  // Click outside to close menu
+  function onWindowPointerDown(e: PointerEvent) {
+    if (showMenu && menuWrapEl && !menuWrapEl.contains(e.target as Node)) {
+      showMenu = false;
+    }
+  }
+
+  // Menu commands
+  function onImportClick() {
+    importInputEl?.click();
+    closeMenu();
+  }
+  async function onExportFromMenu() {
+    await onExportClick();   // you already have this handler wired
+    closeMenu();
+  }
+  function onChangePassFromMenu() {
+    showChangePass = true;
+    closeMenu();
+  }
+
 </script>
 
-{#if unlocked}
-  <VaultList />
-{:else}
-  <Unlock />
-{/if}
+
+<!-- Close the menu when tapping outside -->
+<svelte:window on:pointerdown={onWindowPointerDown} />
+
+
 
 <style>
   main { max-width: 900px; margin: 2rem auto; padding: 1rem; font: 14px/1.4 system-ui, sans-serif; }
@@ -167,18 +261,129 @@
   }
   .splash img { width: 96px; height: 96px; margin-bottom: .75rem; }
 
-.home { padding: 2rem 0; }
-.home .actions { display:flex; flex-wrap:wrap; gap:.75rem; }
-.import input[type="file"] { display:block; }
+  .home { padding: 2rem 0; }
+  .home .actions { display:flex; flex-wrap:wrap; gap:.75rem; }
+  .import input[type="file"] { display:block; }
+
+  /* ADD: top actions row (mobile-friendly) */
+  .top-actions {
+    display:flex; justify-content:flex-end; gap:.5rem;
+    margin-bottom: .75rem; flex-wrap: wrap;
+  }
+  .link {
+    background: none; border: 1px solid #2a2a2a; color: #ddd;
+    padding:.4rem .6rem; border-radius: 6px;
+  }
+  .link:active { transform: scale(.98); }
+
+  /* ADD: floating action button for passphrase change */
+.fab-change {
+  position: fixed; right: 16px; bottom: 16px; z-index: 1500;
+  background: #0a66c2; color: #fff; border: none;
+  border-radius: 999px; padding: .6rem .9rem; box-shadow: 0 6px 14px rgba(0,0,0,.35);
+}
+.fab-change:active { transform: translateY(1px); }
+
+
+/* Kebab button — large touch target for mobile */
+  .kebab-wrap { position: relative; }
+  
+/* --- Kebab FAB (fixed, always on top when ready) --- */
+  .fab-menu {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 3000; /* over app UI */
+  }
+  .kebab {
+    width: 44px; height: 44px; border-radius: 22px;
+    display: grid; place-items: center;
+    background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a;
+    box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  }
+  .kebab:active { transform: translateY(1px); }
+
+  /* Dropdown menu */
+  .menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 230px;
+    background: #121212; color: #ddd;
+    border: 1px solid #2a2a2a; border-radius: 8px;
+    box-shadow: 0 12px 24px rgba(0,0,0,.40);
+    padding: 6px;
+  }
+  .menu button {
+    width: 100%;
+    text-align: left;
+    background: none; border: none; color: #ddd;
+    padding: .65rem .75rem; border-radius: 6px; font-size: 15px;
+  }
+  .menu button:hover, .menu button:active { background: #1f1f1f; }
+
+   /* Hide the real file input */
+  .hidden-file {
+    position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+  }
+
 
 </style>
 
 <main>
-  <!-- Diagnostic banner -->
+  <!-- ADD: Show the Change Passphrase button whenever the app is ready (locked or unlocked) -->
+
+  
+{#if initStatus === 'ready'}
+    <div class="fab-menu" bind:this={menuWrapEl}>
+      <button
+        class="kebab"
+        aria-haspopup="menu"
+        aria-expanded={showMenu}
+        aria-controls="app-menu"
+        on:click={onKebabClick}
+        title="Menu"
+      >
+        <!-- SVG vertical kebab (no font issues) -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="5" r="2"></circle>
+          <circle cx="12" cy="12" r="2"></circle>
+          <circle cx="12" cy="19" r="2"></circle>
+        </svg>
+      </button>
+
+      {#if showMenu}
+        <div id="app-menu" class="menu" role="menu">
+          <button role="menuitem" on:click={onImportClick}>Import file…</button>
+          <button role="menuitem" on:click={onExportFromMenu}>Export file…</button>
+          <button role="menuitem" on:click={onChangePassFromMenu}>Change passphrase…</button>
+
+          <!-- Hidden file input; reuses your existing onImportUpload handler -->
+          <input
+            bind:this={importInputEl}
+            class="hidden-file"
+            type="file"
+            accept=".mvault,application/json"
+            on:change={onImportUpload}
+          />
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+
+
+ 
+  {#if unlocked}
+    <VaultList />
+  {:else}
+    <Unlock />
+  {/if}
+ <!-- Diagnostic banner -->
   {#if initStatus === 'loading'}
 
     <div class="splash">
-      <img alt="MVault logo" src="/icons/icon-192-maskable.png" />
+      <img alt="MVault logo" src="./icons/icon-192-maskable.png" />
       <h1>MVault</h1>
       <p>Initializing secure crypto…</p>
     </div>
@@ -191,80 +396,21 @@
     </div>
 
   {:else if initStatus === 'ready' && (state === 'new' || state === 'locked')}
-  <section class="home">
-    <h2>Welcome to MVault</h2>
-    <div class="actions">
-      {#if state === 'locked'}
-        <input type="password" placeholder="Master password" bind:value={master} />
-        <button on:click={unlock} disabled={!master}>Unlock</button>
-      {/if}
 
-      {#if state === 'new'}
-        <input type="password" placeholder="Set master password" bind:value={master} />
-        <button on:click={createNew} disabled={!master}>Create Vault</button>
-      {/if}
+    <!-- <button on:click={() => openFromFileFSA()}>Open (file)</button> -->
+    <label class="import">
+      <!-- <span>Import (.mvault)</span> -->
+      <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
+    </label>
 
-      <label class="import">
-        <span>Import vault file</span>
-        <input type="file" accept=".mvault,application/json" on:change={importVault} />
-      </label>
-      <button on:click={exportVault} disabled={!vaultFile}>Export .mvault</button>
-    </div>
-  </section>
-{/if}
+    <button on:click={onExportClick}>Export .mvault</button>
 
+    <section class="home"></section>
 
-  {#if initStatus !== 'ready'}
-    <!-- Keep page visible even while initializing or on error -->
-    <p>If this persists, open DevTools (⌘⌥I) & check the console.</p>
-  {/if}
-
-  {#if state === 'new'}
-    <h2>Create new vault</h2>
-    <input type="password" placeholder="Master password (use a long passphrase)"
-           bind:value={master} />
-    <button on:click={createNew} disabled={!master || initStatus!=='ready'}>Create</button>
-    <hr />
-    <p>Or import an existing vault file:</p>
-    <input type="file" accept=".mvault,application/json" on:change={importVault} />
-  {:else if state === 'locked'}
-    <h2>Unlock vault</h2>
-    <input type="password" placeholder="Master password" bind:value={master} />
-    <div class="actions">
-      <button on:click={unlock} disabled={!master || !vaultFile || initStatus!=='ready'}>Unlock</button>
-      <input type="file" accept=".mvault,application/json" on:change={importVault} />
-    </div>
-  {:else}
-    <h2>Password Vault</h2>
-    <div class="actions">
-      <button on:click={addEntry}>Add</button>
-      <button on:click={save}>Save (re-encrypt)</button>
-      <button on:click={exportVault}>Export .mvault</button>
-      <input placeholder="Search" bind:value={filter} />
-    </div>
-
-    <table>
-      <thead>
-        <tr><th>App / URL</th><th>Username</th><th>Password</th><th>Notes</th><th>Actions</th></tr>
-      </thead>
-      <tbody>
-        {#each filtered as e (e.id)}
-        <tr>
-          <td>
-            <input placeholder="App name" bind:value={e.app} />
-            <input placeholder="URL" bind:value={e.url} />
-          </td>
-          <td><input placeholder="username" bind:value={e.username} /></td>
-          <td class="row">
-            <input placeholder="password" bind:value={e.password} />
-            <button on:click={() => e.password = generatePassword()}>Generate</button>
-            <button on:click={() => copy(e.password)} disabled={!e.password}>Copy</button>
-          </td>
-          <td><textarea rows="2" bind:value={e.notes}></textarea></td>
-          <td><button on:click={() => removeEntry(e.id)}>Delete</button></td>
-        </tr>
-        {/each}
-      </tbody>
-    </table>
   {/if}
 </main>
+
+<!-- ADD: Mount the dialog once at root so it overlays everything -->
+<ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} />
+
+<Toast />

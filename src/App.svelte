@@ -11,7 +11,7 @@
   // ... keep your existing imports (Unlock, VaultList, session, etc.)
 
   import { onMount } from 'svelte';
-  import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
+  //import { loadVaultFile, saveVaultFile } from './lib/data/fileStore';
   import { createVaultFile, openVaultFile, type VaultFile, type VaultData } from './lib/vault';
   import { generatePassword } from './lib/utils/passwords';
 
@@ -58,7 +58,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
       console.log('libsodium loaded; version major=', sodium.default.SODIUM_LIBRARY_VERSION_MAJOR );
 
       // Load any existing vault
-      vaultFile = await loadVaultFile();
+      //vaultFile = await loadVaultFile();
       state = vaultFile ? 'locked' : 'new';
       initStatus = 'ready';
 
@@ -77,6 +77,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
     }
   });
 
+  /*
   async function createNew() {
     try {
       const vf = await createVaultFile(master, { entries: [] });
@@ -89,6 +90,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
       alert('Failed to create vault: ' + (e as any)?.message);
     }
   }
+*/
 
   async function unlock() {
     try {
@@ -129,7 +131,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
     await exportToDownload('vault.mvault');
   }
 
-
+/*
   async function save() {
     try {
       if (!master) return;
@@ -142,7 +144,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
       alert('Save failed: ' + (e as any)?.message);
     }
   }
-
+*/
   function copy(text: string) {
     navigator.clipboard.writeText(text);
     setTimeout(async () => {
@@ -174,6 +176,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
     URL.revokeObjectURL(a.href);
   }
 
+  /*
   function importVault(ev: Event) {
     const file = (ev.target as HTMLInputElement).files?.[0];
     if (!file) return;
@@ -193,6 +196,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
     };
     reader.readAsText(file);
   }
+    */
 
   $: filtered = data.entries.filter(e =>
     [e.app, e.url, e.username].join(' ').toLowerCase().includes(filter.toLowerCase())

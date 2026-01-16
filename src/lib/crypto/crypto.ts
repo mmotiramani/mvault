@@ -82,6 +82,7 @@ export async function createEncryptedPackage(obj: unknown, pass: string) {
 function toUint8(src: number[] | Uint8Array | ArrayBuffer | ArrayLike<number>): Uint8Array {
   if (src instanceof Uint8Array) return src;
   if (src instanceof ArrayBuffer) return new Uint8Array(src);
+  return new Uint8Array(src as number[]);
   if (Array.isArray(src) || (src && typeof (src as any).length === 'number')) {
     const len = (src as ArrayLike<number>).length as number;
     const out = new Uint8Array(len);

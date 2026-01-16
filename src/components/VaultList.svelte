@@ -28,12 +28,17 @@
 
   function clearFilters() { q = ''; selectedTags = []; }
 
-  async function refresh() {
-    const s = get(session);
-    if (!s.key) { entries = []; selectedId = null; return; }
-    const all = await listItems<VaultItemPayload>(s.key);
-    // sort by name asc
-    entries = all.sort((a,b) => a.payload.name.localeCompare(b.payload.name));
+
+async function refresh() {
+  const s = get(session);
+  if (!s.key) { entries = []; selectedId = null; return; }
+
+  const all = await listItems<VaultItemPayload>(s.key);
+
+  // Sort by the DECRYPTED payload name (guarded to avoid undefined errors)
+  entries = all.sort((a, b) =>
+    (a.payload?.name ?? '').localeCompare(b.payload?.name ?? '', undefined, { sensitivity: 'base' })
+  );
   }
 
   $: visible = entries.filter(({ payload }) => {

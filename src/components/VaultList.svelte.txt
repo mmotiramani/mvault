@@ -33,7 +33,13 @@
     if (!s.key) { entries = []; selectedId = null; return; }
     const all = await listItems<VaultItemPayload>(s.key);
     // sort by name asc
-    entries = all.sort((a,b) => a.payload.name.localeCompare(b.payload.name));
+    //entries = all.sort((a,b) => a.payload.name.localeCompare(b.payload.name));
+
+    // Sort using the decrypted payload's name, with guards to avoid crashes
+    visible.sort((a, b) =>
+      (a.payload?.name ?? '').localeCompare(b.payload?.name ?? '', undefined, { sensitivity: 'base' })
+);
+
   }
 
   $: visible = entries.filter(({ payload }) => {
