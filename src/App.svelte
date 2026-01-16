@@ -5,6 +5,7 @@
  // import { openFromFileFSA, saveVaultFSA, saveVaultAsFSA, serializeVaultJSON } from './lib/bridge/vault-file';
   
   import { importFromText, exportToDownload } from './lib/bridge/vault-file';
+
   // ... keep your existing imports and logic (Unlock, VaultList, session, autoLock, etc.)
 
   //import { startAutoLock } from './lib/app/autoLock'; // your file
@@ -261,7 +262,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
   {#if initStatus === 'ready'}
     <div class="top-actions">
       <!-- button class="fab-change" on:click={() => (showChangePass = true)}>Change</button -->
-      <button class="link" on:click={() => (showChangePass = true)}>Change passphrase</button>
+      <!-- button class="link" on:click={() => (showChangePass = true)}>Change passphrase</button -->
     </div>
   {/if}
 
@@ -289,7 +290,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
       <input type="file" accept=".mvault,application/json" on:change={onImportUpload} />
     </label>
 
-    <button on:click={onExportClick}>Export .mvault</button>
+    <!-- button on:click={onExportClick}>Export .mvault</button -->
 
     <section class="home"></section>
 
@@ -300,3 +301,12 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
 <ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} />
 
 <Toast />
+
+
+
+
+
+
+
+
+

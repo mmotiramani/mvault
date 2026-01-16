@@ -20,7 +20,31 @@
   export let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   //export let item: VaultItem; // incoming item (for consistency with your props)
 
-  
+
+  // Keep a snapshot of the original payload, 
+  // This snapshot is used to restore all fields on Cancel
+  let original: VaultItemPayload | null = null;
+  let lastLoadedId: string | null = null;
+
+  // Whenever the selected entry changes, capture a fresh snapshot
+  $: if (entry?.item?.id && entry.item.id !== lastLoadedId) {
+    original = structuredClone(entry.payload);
+    lastLoadedId = entry.item.id;
+    // (Optional) also initialize UI fields from entry.payload here if you don’t already do that.
+  }
+
+  //helper to reset all local fields from the snapshot
+  function resetFieldsFromOriginal() {
+    if (!original) return;
+    name = original.name;
+    username = original.username;
+    password = original.password;
+    url = original.url ?? '';
+    tags = [...(original.tags ?? [])];
+    notes = original.notes ?? '';
+  }
+
+
  // Events
   const dispatch = createEventDispatcher<{ close: void; updated: { id: string; item: VaultItem; payload: VaultItemPayload } }>();
 
@@ -142,15 +166,21 @@
   function onCancel() {
     if (!entry) return;
     // Reset to original payload
+
+  resetFieldsFromOriginal();
+    isDirty = false;     // if you derive `isDirty` reactively, ensure it updates from fields above
+    hideAll();           // re-mask password / sensitive bits
+    dispatch('close');   // let the parent close the drawer or clear `selectedId`
+    /*
     name = entry.payload.name ?? '';
     username = entry.payload.username ?? '';
     password = entry.payload.password ?? '';
     url = entry.payload.url ?? '';
     tags = (entry.payload.tags ?? []).slice();
     notes = entry.payload.notes ?? '';
+    */
     fieldErrors = {};
-    isDirty = false;
-    hideAll();
+
   }
 
   async function onCopy() {
@@ -212,11 +242,12 @@
     <div class="empty">Select an entry</div>
   {:else}
     <header>
-      <h2>{entry.payload.name}</h2>
+      <h2>Name : {entry.payload.name}</h2>
       <button class="close" on:click={() => dispatch('close')}>Close</button>
+      <!-- button class="close" on:click={() => dispatch('close')}>Close</button -->
     </header>
 
-    <header>
+   <div>
       <!-- Editable Name -->
       <input
         class="title-input"
@@ -226,10 +257,7 @@
         placeholder="Entry name"
         aria-label="Entry name"
       />
-      <button class="close" on:click={() => dispatch('close')}>Close</button>
-    </header>
-
-
+    </div>
     <div class="field">
       <label>Username</label>
       <input
@@ -328,15 +356,21 @@
 
     <!-- Validation messages (name/url shown near fields) -->
     {#if fieldErrors.name}<div class="error">Name: {fieldErrors.name}</div>{/if}
-
     <!-- Actions -->
+    <footer class="mv-drawer-actions">
+      <button class="btn ghost"    on:click={onCancel} disabled={saving}>Cancel</button>
+      <button class="btn primary"  on:click={onSave}   disabled={!isDirty || saving || Object.keys(fieldErrors).length > 0}>
+        {saving ? 'Saving…' : 'Save'}</button>
+    </footer>
+
+    <!-- Actions 
     <div class="actions">
       <button class="secondary" on:click={onCancel}>Cancel</button>
       <button class="primary" on:click={onSave} disabled={!isDirty || saving || Object.keys(fieldErrors).length > 0}>
         {saving ? 'Saving…' : 'Save'}
       </button>
     </div>
-
+    -->
   {/if}
 </section>
 
@@ -365,5 +399,38 @@
 
   .actions { display:flex; gap:.5rem; justify-content:flex-end; margin-top: 1rem; }
   .error { color:#b00020; }
+
+
+  .mv-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    justify-content: flex-end;
+    margin-block: .5rem 1rem;
+  }
+
+  .mv-drawer-actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: .5rem;
+    justify-content: flex-end;
+    padding: .75rem .5rem;
+    background: var(--surface, #fff);
+    border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  .btn {
+    appearance: none;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: .5rem;
+    padding: .5rem .75rem;
+    font: inherit;
+    background: transparent;
+    cursor: pointer;
+  }
+  .btn.ghost   { background: transparent; }
+  .btn.primary { background: var(--accent, #2563eb); color: white; border-color: transparent; }
+  .btn:disabled { opacity: .6; cursor: default; }
 </style>
 

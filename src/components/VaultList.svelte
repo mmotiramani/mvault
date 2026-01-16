@@ -8,11 +8,27 @@
   import type { VaultItem, VaultItemPayload } from '../lib/data/types';
   import { listItems } from '../lib/data/store';
   import { startAutoLock } from '../lib/app/autolock';
+  import ChangePassphraseDialog from '../lib/ui/ChangePassphraseDialog.svelte';
+  import { importFromText, exportToDownload } from '../lib/bridge/vault-file';
+
+
+
+  import Toast from '../lib/ui/Toast.svelte';
+  import { showToast } from '../lib/ui/toast';
+
+  // local state that controls the dialog visibility
+  let showChangePass = false;
+
 
   let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   let selectedId: string | null = null;
   let matchAll = false; // false = OR, true = AND
-  function toggleMatchMode() { matchAll = !matchAll; }
+  function toggleMatchMode() { 
+    matchAll = !matchAll; 
+    resetEditContext();
+    void refresh();
+  
+  }
   // ...
 
 
@@ -24,9 +40,26 @@
   function toggleTag(t: string) {
     t = t.toLowerCase();
     selectedTags = selectedTags.includes(t) ? selectedTags.filter(x => x !== t) : [...selectedTags, t];
+    resetEditContext();
+    void refresh();
+
   }
 
-  function clearFilters() { q = ''; selectedTags = []; }
+  function clearFilters() { 
+    q = ''; 
+    selectedTags = []; 
+    resetEditContext();
+    void refresh();
+
+  }
+
+//tiny “edit context reset” + a key to remount the drawer
+let editVersion = 0;  // bumping this forces the drawer to remount (discarding unsaved state)
+function resetEditContext() {
+  selectedId = null;
+  showNew = false;
+  editVersion += 1;
+}
 
 
 async function refresh() {
@@ -88,6 +121,33 @@ async function refresh() {
     }
   }
 
+
+  function openChangePassphrase() {
+    // open your ChangePassphrase dialog; or dispatch to parent, depending on your current UI
+    showChangePass = true;
+  }
+
+  async function onExport() {
+    // Assuming you already use this elsewhere:
+   // await exportToDownload('vault.mvault');   // or with your own filename pattern
+
+    console.log('goingto call exportToDownload');
+    await exportToDownload('vault.mvault');
+
+  }
+  function onImport() {
+    // Trigger your import flow (file picker + importFromText)
+    // Keep as-is if you already have this elsewhere; this is only a button hook.
+    /*const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
+    const pass = prompt('Enter passphrase to import:'); if (!pass) return;
+    const text = await file.text();
+    // Default MERGE; allow REPLACE if user confirms
+    const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
+    await importFromText(text, pass, replace);
+    (ev.target as HTMLInputElement).value = ''; // reset input
+    */
+  }
+
   onMount(() => {
     const stop = startAutoLock(10);
     refresh();
@@ -99,6 +159,20 @@ async function refresh() {
 
 <div class="vault uses-full-height">
   <aside class="sidebar">
+    
+    <div class="mv-toolbar">
+      <button class="btn ghost"   on:click={openChangePassphrase}>Change Passphrase</button>
+      <!-- ADD: Mount the dialog once at root so it overlays everything -->
+    <ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} />
+<!--button class="link" on:click={() => (showChangePass = true)}>Change passphrase</button -->
+
+<!-- ADD: Mount the dialog once at root so it overlays everything -->
+<ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} on:changed= {()=>(showToast('Passphrase changed', 'success'))} />
+
+      <!-- button class="btn ghost"   on:click={onImport}>Import</button -->
+      <button class="btn ghost"   on:click={onExport}>Export</button>
+    </div>
+
     <div class="toolbar">
       <input id="mv-search" type="search" bind:value={q} placeholder="Search (/, name, user, url, tag)" />
       <button class="new" on:click={() => showNew = true} title="New (n)">＋</button>
@@ -137,7 +211,15 @@ async function refresh() {
   {#if showNew}
     <NewEntryDrawer on:close={() => showNew = false} on:created={() => refresh()} />
   {/if}
-  <ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} />
+
+  {#if selectedId}
+    {#key editVersion}
+
+      <ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} />
+
+  {/key}
+{/if}
+
 </div>
 
 <style>
