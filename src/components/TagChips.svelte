@@ -1,28 +1,41 @@
 
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { session } from '../lib/app/session'; // note: path from src/lib/ui
 
   /** Two-way bound list of tags (lowercase, deduped) */
   export let tags: string[] = [];
 
   /** Optional UX props */
-  export let placeholder = 'Add tag…';
-  export let maxSuggestions = 8;
+  export let allTags: string[] = [];
+  export let placeholder = 'Add tags…';  
+  /** Disable input */
+  export let disabled = false;
 
-  const dispatch = createEventDispatcher<{ change: string[] }>();
+  export let maxSuggestions = 8;
+  const normalize = (t:string) => t.trim().toLowerCase();
+  //function normalize(t: string) { return (t || '').trim().toLowerCase(); }
+ /** Comma variants: ASCII ',', full‑width '，', ideographic '、' */
+  const DELIM_RE = /[,\uFF0C\u3001]+/g;
+
+  const dispatch = createEventDispatcher<{ change: {tags: string[] } }>();
 
   // Global unique tags across the vault (maintained by session)
-  let allTags: string[] = [];
-  const unsub = session.subscribe(s => { allTags = s.allTags || []; });
 
-  // Input & suggestions state
+   // Input & suggestions state
   let q = '';
+  let composing = false;    // IME composition in progress?
   let show = false;        // dropdown visibility
   let activeIdx = -1;      // keyboard focus within suggestions
   let inputEl: HTMLInputElement | null = null;
 
-  function normalize(t: string) { return (t || '').trim().toLowerCase(); }
+  const unsub = session.subscribe(s => { allTags = s.allTags || []; });
+
+ 
+  function emitChange() {
+    // bubble up so drawers can mark dirty
+    dispatch('change', { tags });
+  }
 
   function setTags(next: string[]) {
     // ensure normalized + unique + sorted
@@ -35,17 +48,48 @@
     const v = normalize(t);
     if (!v) return false;
     if (!tags.includes(v)) {
-      setTags([...tags, v]);
-      return true;
+      tags = ([...tags, v]);
+      emitChange();
+      //return true;
     }
-    return false;
+    //return false;
   }
 
   function removeTag(t: string) {
-    setTags(tags.filter(x => x !== t));
+    tags = tags.filter(x => x !== t);
+    emitChange();
+    // keep focus for fast multi-remove
+    inputEl?.focus();
   }
 
-  function toggleTag(t: string) {
+  function tokenizeInput() {
+    // Split by any delimiter found and add all except the trailing fragment
+    const parts = q.split(DELIM_RE);
+    if (parts.length > 1) {
+      for (let i = 0; i < parts.length - 1; i++) addTag(parts[i]);
+      q = parts[parts.length - 1]; // keep unfinished token
+      // keep suggestions open while tokenizing
+      show = true;
+    }
+  }
+
+    function commitQ() {
+    if (q.trim()) {
+      addTag(q);
+      q = '';
+    }
+    activeIdx = -1;
+    show = false;
+  }
+  function onInput() {
+    if (!composing) {
+      tokenizeInput();  // <- critical for mobile comma behavior
+    }    
+    //q = (e.target as HTMLInputElement).value;
+    //show = true;
+    //activeIdx = -1;
+  }
+   function toggleTag(t: string) {
     tags.includes(t) ? removeTag(t) : addTag(t);
   }
 
@@ -69,43 +113,52 @@
     activeIdx = -1;
   }
 
-  function onInput(e: Event) {
-    q = (e.target as HTMLInputElement).value;
-    show = true;
-    activeIdx = -1;
-  }
+
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' || e.key === 'Tab' || e.key === ',') {
-      e.preventDefault();
-      if (activeIdx >= 0 && activeIdx < suggestions.length) {
-        const s = suggestions[activeIdx];
-        addTag(s);
+    if (disabled) return;
+    if (composing) return;  
+    //if (e.key === 'Enter' || e.key === 'Tab' || e.key === ',') {
+    switch (e.key) {
+      case 'Enter':
+      case 'Tab':  
+        e.preventDefault();
+        if (activeIdx >= 0 && filtered[activeIdx]) {
+          addTag(filtered[activeIdx]);
+          //activeIdx < suggestions.length) {
+        //const s = suggestions[activeIdx];
+        //addTag(s);
         // Keep dropdown open for multi-select; keep query same to add more
         // Optionally clear query to broaden choices:
-        q = '';
-        activeIdx = -1;
-      } else {
-        if (addTag(q)) {
           q = '';
           activeIdx = -1;
+          show = true;
+          inputEl?.focus();
+      } else {
+          commitQ();
         }
-      }
-      // keep it open for multi-select unless Esc or blur
+        break;
+    case 'ArrowDown' :
+     {
+      if (filtered.length) {
+      e.preventDefault();
+
+      activeIdx = (activeIdx + 1) % filtered.length;
       show = true;
+      }
+      break;
     } else if (e.key === 'Backspace' && !q) {
       // remove last chip when input empty
       if (tags.length) {
         setTags(tags.slice(0, -1));
       }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      show = true;
-      activeIdx = suggestions.length ? (activeIdx + 1) % suggestions.length : -1;
-    } else if (e.key === 'ArrowUp') {
+    }
+  case 'ArrowUp':
+    {
       e.preventDefault();
       show = true;
       activeIdx = suggestions.length ? (activeIdx - 1 + suggestions.length) % suggestions.length : -1;
+
     } else if (e.key === 'Escape') {
       show = false;
       activeIdx = -1;
@@ -114,10 +167,29 @@
 
   function onBlur() {
     // Small delay so clicks on suggestions still register
-    setTimeout(() => { show = false; activeIdx = -1; }, 100);
+    // setTimeout(() => { show = false; activeIdx = -1; }, 100);
+    // Commit trailing text on blur so user input isn’t lost
+    commitQ();
   }
 
-  function onPaste(e: ClipboardEvent) {
+ // Suggestions derived from q
+  $: needle = normalize(q);
+  $: filtered = needle
+    ? Array.from(new Set(allTags))
+        .map(normalize)
+        .filter(t => t.includes(needle) && !tags.includes(t))
+        .slice(0, 8)
+    : [];
+
+ // Keep popover open when mouse/touch interacts with options
+  function chooseSuggestion(s: string) {
+    addTag(s);
+    q = '';
+    activeIdx = -1;
+    show = true;
+    inputEl?.focus();
+  }
+    function onPaste(e: ClipboardEvent) {
     const text = e.clipboardData?.getData('text') ?? '';
     if (!text || (!text.includes(',') && !text.includes(' '))) return;
     e.preventDefault();
