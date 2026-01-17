@@ -31,6 +31,10 @@
   }
   // ...
 
+// derive the selected entry whenever selectedId or entries changes
+$: selectedEntry =
+  selectedId ? (entries.find(r => r.item.id === selectedId) ?? null) : null;
+
 
   // UI state
   let q = '';                       // search query
@@ -215,7 +219,15 @@ async function refresh() {
   {#if selectedId}
     {#key editVersion}
 
-      <ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} />
+      <!-- ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} / -->
+
+      <ItemDrawer
+            {selectedId}
+            {entries}
+            entry={selectedEntry}
+            on:close={() => (selectedId = null)}
+          />
+
 
   {/key}
 {/if}
