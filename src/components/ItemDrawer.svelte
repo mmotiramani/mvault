@@ -1,4 +1,4 @@
-
+// ItemDrawer.svelte
 
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';

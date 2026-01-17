@@ -46,6 +46,7 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  height: 100%;
 }
 
 h1 {
@@ -57,12 +58,25 @@ h1 {
   padding: 2em;
 }
 
-#app {
+#app, .app-root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  /* Use modern viewport units that behave well with mobile browser toolbars/IME */
+  min-height: 100dvh;       /* dynamic viewport (Chrome/Android, iOS 17+) */
 }
+
+
+/* Respect safe areas (iOS) */
+.app-root {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  padding-top: max(16px, env(safe-area-inset-top));
+}
+
+
 
 button {
   border-radius: 8px;
@@ -147,7 +161,7 @@ input, textarea, select, button {
 }
 
 /* Use dynamic viewport height (works better under mobile URL bars) */
-@supports (height: 100dvh) {
+@supports (height: 100svh) {
   .uses-full-height {
     height: 100dvh; /* assign this utility to containers that need full height */
   }
@@ -207,4 +221,21 @@ img, video { max-width: 100%; height: auto; }
 @media (max-width: 700px) {
   .row { padding: .6rem .7rem; border-radius: 10px; }
   .row .sub { font-size: .95rem; }
+}
+
+
+/* Remove any accidental orientation locks in CSS */
+@media (orientation: portrait) {
+  /* Ensure the main container is visible and scrollable */
+  .app-root {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+  }
+}
+
+/* Avoid fixed widths that exceed the viewport */
+.container, .pane, .drawer {
+  max-width: 100%;
+  box-sizing: border-box;
 }

@@ -1,4 +1,4 @@
-
+//ItemDrawer.svelte
 
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
@@ -20,6 +20,15 @@
   export let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   //export let item: VaultItem; // incoming item (for consistency with your props)
 
+  // If not already declared, declare entry like this:
+  export let entry: { item: VaultItem; payload: VaultItemPayload } | null | undefined;
+
+  // Add this reactive derived id:
+  $: entryId = entry?.item.id ?? '';
+
+   // Local entry (selected)
+  $: entry = entries.find((e) => e.item.id === selectedId);
+ 
 
   // Keep a snapshot of the original payload, 
   // This snapshot is used to restore all fields on Cancel
@@ -49,9 +58,6 @@
   const dispatch = createEventDispatcher<{ close: void; updated: { id: string; item: VaultItem; payload: VaultItemPayload } }>();
 
   
-  // Local entry (selected)
-  let entry: { item: VaultItem; payload: VaultItemPayload } | undefined;
-  $: entry = entries.find((e) => e.item.id === selectedId);
   const s = get(session);
   let key: CryptoKey | null = get(session).key;
   // key = s.key;
@@ -273,7 +279,7 @@
       <label>Password</label>
       <div class="pw">
         <input
-          type={$revealedId === entry.item.id ? 'text' : 'password'}
+          type={$revealedId === entryId ? 'text' : 'password'}
           bind:value={password}
           on:input={markDirty}
           on:blur={() => hideAll()}
@@ -291,13 +297,13 @@
 
         <!-- Toggle on click: reveal on click, -->
         <button
-          aria-pressed={$revealedId === entry.item.id}
-          on:click={() => toggleReveal(entry.item.id, { autoHideMs: REVEAL_MS })}
+          aria-pressed={$revealedId === entryId}
+          on:click={() => entryId && toggleReveal(entryId, { autoHideMs: REVEAL_MS })}
           title="Click to reveal"
         >👁️</button>
         <button on:click={onCopyPassword} title="Copy password">📋</button>
       </div>
-      {#if $revealedId === entry.item.id}
+      {#if $revealedId === entryId}
         <small>Auto-hides in {REVEAL_MS/1000}s or on tab blur.</small>
       {/if}
     </div>
