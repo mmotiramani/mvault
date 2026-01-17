@@ -23,8 +23,13 @@ export async function changePassphrase(oldPass: string, newPass: string): Promis
       try {
         for (const it of items) {
           const payload = await decryptJSON<VaultItemPayload>(oldKey, it.enc.iv, it.enc.ct);
-          const enc = await encryptJSON(newKey, payload);
-          const upd: VaultItem = { ...it, updatedAt: Date.now(), enc: { v: 2, ...enc } as Encrypted };
+          //const enc = await encryptJSON(newKey, payload);
+          //const upd: VaultItem = { ...it, updatedAt: Date.now(), enc: { v: 2, ...enc } as Encrypted };
+
+          const sealed = await encryptJSON(newKey, payload); // -> typically { iv, ct }
+          const toNumArray = (x: Uint8Array | number[]) => (Array.isArray(x) ? x : Array.from(x));
+          const enc: Encrypted = { v: 2 as const, iv: toNumArray((sealed as any).iv), ct: toNumArray((sealed as any).ct) };
+          const upd: VaultItem = { ...it, updatedAt: Date.now(), enc };
           store.put(upd);
         }
         resolve();

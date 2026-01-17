@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { session } from '../lib/app/session';
+  import { session,refreshTags } from '../lib/app/session';
   import { get } from 'svelte/store';
   import { createItem } from '../lib/data/store';
   import type { VaultItemPayload } from '../lib/data/types';
@@ -150,7 +150,7 @@
             const id = crypto.randomUUID();
             await createItem($session.key, id, payload);
 
-            await $session.refreshTags?.();
+            await refreshTags();
 
             dispatch('created');
             close();
