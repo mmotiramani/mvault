@@ -396,7 +396,7 @@ async function refresh() {
 
 
     <!-- Tag filters from session -->
-    <div class="filter-tags">
+    <div class="tags-bar">
       {#if $session.allTags.length > 0}
         {#each $session.allTags as t}
           {#key t}
@@ -480,8 +480,8 @@ async function refresh() {
     cursor: pointer;
   }
   .tags-bar button.selected {
-    background: var(--chip-selected, #2a6);
-    color: #fff;
+    background: var(--chip-selected, rgb(151, 155, 153));
+    color: #080707;
     border-color: var(--chip-selected, #2a6);
   }
   .tags-bar button.clear {
