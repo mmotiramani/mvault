@@ -1,15 +1,26 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { session } from '../lib/app/session';
-  import { get } from 'svelte/store';
   import ItemDrawer from './ItemDrawer.svelte';
   import NewEntryDrawer from './NewEntryDrawer.svelte';
   import type { VaultItem, VaultItemPayload } from '../lib/data/types';
-  import { listItems } from '../lib/data/store';
+  import { 
+    listItems,
+    updateItemPayload,
+    createItemFromPayload // <-- the helper you just added in store.ts
+ } from '../lib/data/store';
   import { startAutoLock } from '../lib/app/autolock';
   import ChangePassphraseDialog from '../lib/ui/ChangePassphraseDialog.svelte';
   import { importFromText, exportToDownload } from '../lib/bridge/vault-file';
+//  import { isDirty } from 'zod/v3';
+
+//make tags availability generic for mobile/desktop and make the unified drawer Item and New
+  import { get, writable } from 'svelte/store';
+  import { refreshTags, session } from '../lib/app/session';
+
+  const uiDirty = writable(false);
+  const markDirty = () => uiDirty.set(true);
+  const resetDirty = () => uiDirty.set(false);
 
 
 
@@ -20,7 +31,7 @@
   let showChangePass = false;
 
 
-  let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
+  //let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   let selectedId: string | null = null;
   let matchAll = false; // false = OR, true = AND
   function toggleMatchMode() { 
@@ -31,15 +42,55 @@
   }
   // ...
 
+  //make tags availability generic for mobile/desktop and make the unified drawer Item and New
+  // Your own state (examples; keep your real ones)
+   // Page state
+  let showNew = false;
+  //let selectedId = null;
+  //let selectedEntry:string | null = null;   // ensure you set this when user picks an item
+  //let editVersion = 0;        // if you already use keyed re-mounts
+
+
+  // Every row is { item: VaultItem, payload: VaultItemPayload }
+  let entries: Array<{ item: any; payload: any }> = [];
+  let visible: Array<{ item: any; payload: any }> = [];
+
+  // The row currently opened in ItemDrawer
+  let selectedRow: { item: any; payload: any } | null = null;
+
+
+  // Your existing helpers (replace with your real functions)
+  // async function refresh() { /* re-query items and set visible list */ }
+  //async function createItem(payload) { /* persist new item */ }
+  //async function saveExistingItem(id, payload) { /* persist changes */ }
+/*
+  async function handleCreated(e) {
+    await createItem(e.detail.payload);
+    await refresh();
+    await refreshTags();   // keep $session.allTags up to date for TagChips
+    showNew = false;
+    resetDirty();
+  }
+*/
+
+/*
+  async function handleSave() {
+    if (!selectedId || !selectedEntry) return;
+    await saveExistingItem(selectedId, selectedEntry.payload);
+    await refresh();
+    await refreshTags();   // suggestions refresh globally
+    resetDirty();
+  }
+*/
+
 // derive the selected entry whenever selectedId or entries changes
-$: selectedEntry =
-  selectedId ? (entries.find(r => r.item.id === selectedId) ?? null) : null;
+//$: selectedEntry =
+  // selectedId ? (entries.find(r => r.item.id === selectedId) ?? null) : null;
 
 
   // UI state
   let q = '';                       // search query
   let selectedTags: string[] = [];  // filter by tags
-  let showNew = false;
 
   function toggleTag(t: string) {
     t = t.toLowerCase();
@@ -67,8 +118,21 @@ function resetEditContext() {
 
 
 async function refresh() {
-  const s = get(session);
-  if (!s.key) { entries = []; selectedId = null; return; }
+
+  const key = get(session).key as CryptoKey | null;
+  if (!key) { entries = visible = []; selectedRow = null; return; }
+  entries = await listItems<any>(key);
+  visible = entries;
+  if (selectedId) selectedRow = entries.find(e => e.item.id === selectedId) ?? null;
+  
+  /*const s = get(session);
+  if (!s.key) { 
+    entries = []; 
+    selectedId = null;
+    visible = [];
+    selectedRow = null;  
+    return; 
+  }
 
   const all = await listItems<VaultItemPayload>(s.key);
 
@@ -77,9 +141,47 @@ async function refresh() {
     (a.payload?.name ?? '').localeCompare(b.payload?.name ?? '', undefined, { sensitivity: 'base' })
   );
 
-  
+  // Keep selectedRow up to date if the selection is still valid
+  if (selectedId) {
+    selectedRow = entries.find(e => e.item.id === selectedId) ?? null;
+  } */
+}
+
+
+  // Handle create from NewEntryDrawer
+  async function handleCreated(e: CustomEvent<{ payload: any }>) {
+    const key = get(session).key as CryptoKey | null;
+    if (!key) return;
+
+    await createItemFromPayload(key, e.detail.payload);
+    // createItemFromPayload already calls refreshTags()
+    await refresh();
+
+    showNew = false;
+    resetDirty();
   }
 
+  
+// Handle save from ItemDrawer
+  async function handleSave() {
+    const key = get(session).key as CryptoKey | null;
+    if (!key || !selectedRow) return;
+
+    await updateItemPayload(selectedRow.item, selectedRow.payload, key);
+    // updateItemPayload already calls refreshTags()
+    await refresh();
+
+    resetDirty();
+  }
+
+ 
+  // When user opens an item from the list
+  function openItem(row: { item: any; payload: any }) {
+    selectedId  = row.item.id;
+    selectedRow = row;
+  }
+ 
+/*
   $: visible = entries.filter(({ payload }) => {
     const qok = !q ? true :
       (payload.name?.toLowerCase().includes(q.toLowerCase())
@@ -97,6 +199,7 @@ async function refresh() {
 
     return qok && tagok;
   });
+  */
 
 
   function isEditableTarget(el: Element | null) {
@@ -203,32 +306,42 @@ async function refresh() {
 
     <div class="list">
       {#each visible as { item, payload } (item.id)}
-        <button class="row {selectedId===item.id?'active':''}" on:click={() => selectedId = item.id}>
+        <div class="row" on:click={() => openItem({ item, payload })}>
+        <!-- button class="row {selectedId===item.id?'active':''}" on:click={() => selectedId = item.id} -->
           <div class="name">{payload.name}</div>
           <div class="sub">{payload.username}{#if payload.url} · {payload.url}{/if}</div>
-        </button>
-      {/each}
+          <!--/button -->
+        </div>
+
+      {/each}      
     </div>
   </aside>
 
+
+<!-- List -->
+
+
   <!-- Drawers -->
+  <!-- NEW ENTRY -->
   {#if showNew}
-    <NewEntryDrawer on:close={() => showNew = false} on:created={() => refresh()} />
+    <NewEntryDrawer 
+    on:close={() => showNew = false} 
+    on:dirty={markDirty}
+    on:created={handleCreated} 
+    />
   {/if}
-
-  {#if selectedId}
+  <!-- EDIT ENTRY -->
+  {#if selectedId && selectedRow}
     {#key editVersion}
-
       <!-- ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} / -->
-
       <ItemDrawer
-            {selectedId}
-            {entries}
-            entry={selectedEntry}
-            on:close={() => (selectedId = null)}
-          />
-
-
+        entry={selectedRow}                            
+        entryId={selectedId}
+        on:close={() => (selectedId = null)}
+        on:dirty={markDirty}
+        on:save={handleSave}
+        />
+        <!--entryId={selectedId}-->
   {/key}
 {/if}
 

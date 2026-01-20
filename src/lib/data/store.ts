@@ -4,6 +4,8 @@ import type { Encrypted, VaultItem, VaultItemPayload } from './types';
 import { encryptJSON, decryptJSON } from '../crypto/crypto';
 import { openDBWithSchema, ITEMS_STORE } from './db';
 import { refreshTags } from '../app/session';
+import { isDirty } from 'zod/v3';
+import { fa } from 'zod/locales';
 
 async function txPut(db: IDBDatabase, val: unknown) {
   return new Promise<void>((resolve, reject) => {
@@ -39,6 +41,7 @@ export async function createItem(key: CryptoKey, id: string, payload: VaultItemP
   const item: VaultItem = { id, createdAt: now, updatedAt: now, enc: {  ...enc } as Encrypted };
   await txPut(db, item);
   db.close();
+  //isDirty = false;
   return item;
 }
 
@@ -108,6 +111,7 @@ export async function updateItem<T>(key: CryptoKey, i: VaultItem, payload: T): P
 export async function deleteItem(id: string): Promise<void> {
   const db = await openDBWithSchema();
   await txDel(db, id);
+  await refreshTags();
   db.close();
 }
 
@@ -199,6 +203,7 @@ export async function updateItemPayload(
   return updateItem(key, item, clean);
 }
 
+
 /*
 
 export async function updateItemPayload(
@@ -239,3 +244,41 @@ export async function updateItemPayload(
   return updated;
 }
 */
+
+
+// 
+export async function createItemFromPayload(
+  key: CryptoKey,
+  next: VaultItemPayload
+): Promise<VaultItem> {
+  if (!key) throw new Error('Locked: no session key');
+
+  // Reuse the same normalization rules as updateItemPayload
+  const clean: VaultItemPayload = {
+    name: (next.name ?? '').trim(),
+    username: (next.username ?? '').trim(),
+    password: next.password ?? '',
+    url: normalizeUrl(next.url),
+    tags: sanitizeTags(next.tags),
+    notes: next.notes ?? ''
+  };
+
+  const errs = validatePayload(clean);
+  if (errs.length) {
+    const e: any = new Error('invalid-payload');
+    e.code = 'invalid-payload';
+    e.errors = errs;
+    throw e;
+  }
+
+  // Canonical id is the (clean) name for mvault (your baseline) 
+  // NOTE: createItem currently uses "put", so identical names will overwrite.
+  // If you want "duplicate name" protection, switch to "add" in txPut.
+  const id = clean.name;
+  const item = await createItem(key, id, clean);
+
+  // Keep the global tag universe up-to-date like updateItem does
+  await refreshTags();
+
+  return item;
+}

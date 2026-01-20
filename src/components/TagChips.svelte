@@ -1,64 +1,49 @@
 
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { session } from '../lib/app/session'; // note: path from src/lib/ui
+  import { createEventDispatcher } from 'svelte';
 
-  /** Two-way bound list of tags (lowercase, deduped) */
+  /** Two-way bound list of tags */
   export let tags: string[] = [];
 
-  /** Optional UX props */
+  /** Universe of known tags to suggest (pass from the drawer) */
   export let allTags: string[] = [];
-  export let placeholder = 'Add tags…';  
+
+  /** Placeholder text */
+  export let placeholder = 'Add tags…';
+
   /** Disable input */
   export let disabled = false;
 
-  export let maxSuggestions = 8;
-  const normalize = (t:string) => t.trim().toLowerCase();
-  //function normalize(t: string) { return (t || '').trim().toLowerCase(); }
- /** Comma variants: ASCII ',', full‑width '，', ideographic '、' */
+  /** Normalize/canonicalize a tag token; tweak if you need different casing */
+  const normalize = (s: string) => s.trim().toLowerCase();
+
+  /** Comma variants: ASCII ',', full‑width '，'(U+FF0C), ideographic '、'(U+3001) */
   const DELIM_RE = /[,\uFF0C\u3001]+/g;
 
-  const dispatch = createEventDispatcher<{ change: {tags: string[] } }>();
+  const dispatch = createEventDispatcher<{ change: { tags: string[] } }>();
 
-  // Global unique tags across the vault (maintained by session)
-
-   // Input & suggestions state
-  let q = '';
+  let q = '';               // current input text
   let composing = false;    // IME composition in progress?
-  let show = false;        // dropdown visibility
-  let activeIdx = -1;      // keyboard focus within suggestions
+  let show = false;         // show suggestions popover?
+  let activeIdx = -1;       // keyboard-highlighted suggestion
   let inputEl: HTMLInputElement | null = null;
 
-  const unsub = session.subscribe(s => { allTags = s.allTags || []; });
-
- 
   function emitChange() {
-    // bubble up so drawers can mark dirty
     dispatch('change', { tags });
   }
 
-  function setTags(next: string[]) {
-    // ensure normalized + unique + sorted
-    const set = new Set(next.map(normalize).filter(Boolean));
-    tags = Array.from(set).sort();
-    dispatch('change', tags);
-  }
-
-  function addTag(t: string) {
-    const v = normalize(t);
-    if (!v) return false;
-    if (!tags.includes(v)) {
-      tags = ([...tags, v]);
+  function addTag(raw: string) {
+    const t = normalize(raw);
+    if (!t) return;
+    if (!tags.includes(t)) {
+      tags = [...tags, t];
       emitChange();
-      //return true;
     }
-    //return false;
   }
 
   function removeTag(t: string) {
     tags = tags.filter(x => x !== t);
     emitChange();
-    // keep focus for fast multi-remove
     inputEl?.focus();
   }
 
@@ -68,12 +53,11 @@
     if (parts.length > 1) {
       for (let i = 0; i < parts.length - 1; i++) addTag(parts[i]);
       q = parts[parts.length - 1]; // keep unfinished token
-      // keep suggestions open while tokenizing
       show = true;
     }
   }
 
-    function commitQ() {
+  function commitQ() {
     if (q.trim()) {
       addTag(q);
       q = '';
@@ -81,98 +65,70 @@
     activeIdx = -1;
     show = false;
   }
+
   function onInput() {
-    if (!composing) {
-      tokenizeInput();  // <- critical for mobile comma behavior
-    }    
-    //q = (e.target as HTMLInputElement).value;
-    //show = true;
-    //activeIdx = -1;
+    if (!composing) tokenizeInput();   // <- critical for mobile comma behavior
   }
-   function toggleTag(t: string) {
-    tags.includes(t) ? removeTag(t) : addTag(t);
-  }
-
-  function candidateList() {
-    const needle = normalize(q);
-    const src = allTags || [];
-    const filtered = needle
-      ? src.filter(t => t.startsWith(needle))
-      : src.slice(); // on focus with empty query: show popular/all (session already sorted if you choose)
-    // exclude already chosen
-    const out = filtered.filter(t => !tags.includes(t));
-    // dedupe + clamp
-    return Array.from(new Set(out)).slice(0, maxSuggestions);
-  }
-
-  $: suggestions = candidateList();
-
-  function onFocus() {
-    // Show suggestions immediately on focus (even with empty query)
-    show = true;
-    activeIdx = -1;
-  }
-
-
 
   function onKeydown(e: KeyboardEvent) {
-    if (disabled) return;
-    if (composing) return;  
-    //if (e.key === 'Enter' || e.key === 'Tab' || e.key === ',') {
+    if (disabled || composing) return;
+
     switch (e.key) {
       case 'Enter':
-      case 'Tab':  
+      case 'Tab':
         e.preventDefault();
         if (activeIdx >= 0 && filtered[activeIdx]) {
           addTag(filtered[activeIdx]);
-          //activeIdx < suggestions.length) {
-        //const s = suggestions[activeIdx];
-        //addTag(s);
-        // Keep dropdown open for multi-select; keep query same to add more
-        // Optionally clear query to broaden choices:
           q = '';
           activeIdx = -1;
           show = true;
           inputEl?.focus();
-      } else {
+        } else {
           commitQ();
         }
         break;
-    case 'ArrowDown' :
-     {
-      if (filtered.length) {
-      e.preventDefault();
-
-      activeIdx = (activeIdx + 1) % filtered.length;
-      show = true;
-      }
-      break;
-    } else if (e.key === 'Backspace' && !q) {
-      // remove last chip when input empty
-      if (tags.length) {
-        setTags(tags.slice(0, -1));
-      }
-    }
-  case 'ArrowUp':
-    {
-      e.preventDefault();
-      show = true;
-      activeIdx = suggestions.length ? (activeIdx - 1 + suggestions.length) % suggestions.length : -1;
-
-    } else if (e.key === 'Escape') {
-      show = false;
-      activeIdx = -1;
+      case 'ArrowDown':
+        if (filtered.length) {
+          e.preventDefault();
+          activeIdx = (activeIdx + 1) % filtered.length;
+          show = true;
+        }
+        break;
+      case 'ArrowUp':
+        if (filtered.length) {
+          e.preventDefault();
+          activeIdx = (activeIdx - 1 + filtered.length) % filtered.length;
+          show = true;
+        }
+        break;
+      case 'Escape':
+        if (show) {
+          e.preventDefault();
+          show = false;
+          activeIdx = -1;
+        }
+        break;
+      case 'Backspace':
+        if (!q && tags.length) {
+          e.preventDefault();
+          removeTag(tags[tags.length - 1]);
+        }
+        break;
+      default:
+        show = true; // keep popover visible while typing
     }
   }
 
+  function onFocus() {
+    show = !!q;
+  }
+
   function onBlur() {
-    // Small delay so clicks on suggestions still register
-    // setTimeout(() => { show = false; activeIdx = -1; }, 100);
     // Commit trailing text on blur so user input isn’t lost
     commitQ();
   }
 
- // Suggestions derived from q
+  // Suggestions derived from q
   $: needle = normalize(q);
   $: filtered = needle
     ? Array.from(new Set(allTags))
@@ -181,7 +137,6 @@
         .slice(0, 8)
     : [];
 
- // Keep popover open when mouse/touch interacts with options
   function chooseSuggestion(s: string) {
     addTag(s);
     q = '';
@@ -189,102 +144,195 @@
     show = true;
     inputEl?.focus();
   }
-    function onPaste(e: ClipboardEvent) {
-    const text = e.clipboardData?.getData('text') ?? '';
-    if (!text || (!text.includes(',') && !text.includes(' '))) return;
-    e.preventDefault();
-    const parts = text.split(/[, ]+/).map(normalize).filter(Boolean);
-    if (parts.length) {
-      setTags([...tags, ...parts]);
-      q = '';
-      show = true;
-      activeIdx = -1;
-    }
-  }
-
-  onDestroy(() => unsub());
 </script>
 
-<div class="chips" on:click={() => inputEl?.focus()}>
-  {#each tags as t (t)}
-    <span class="chip">{t}
-      <button class="x" on:click={() => removeTag(t)} aria-label={`remove ${t}`}>×</button>
-    </span>
-  {/each}
+<div class="tag-input" on:focusin={onFocus}>
+  <div class="pill" aria-label="tags">
+    {#each tags as t (t)}
+      <span class="tag">
+        {t}
+        <button
+          type="button"
+          class="x"
+          on:click={() => removeTag(t)}
+          aria-label={`remove ${t}`}
+        >×</button>
+      </span>
+    {/each}
 
-  <input
-    bind:this={inputEl}
-    class="chip-input"
-    type="text"
-    bind:value={q}
-    placeholder={placeholder}
-    on:focus={onFocus}
-    on:input={onInput}
-    on:keydown={onKeydown}
-    on:blur={onBlur}
-    on:paste={onPaste}
-    autocomplete="off"
-    autocapitalize="none"
-    spellcheck="false"
-  />
+    <input
+      bind:this={inputEl}
+      class="tag-text-input"
+      bind:value={q}
+      placeholder={placeholder}
+      {disabled}
+      on:input={onInput}
+      on:keydown={onKeydown}
+      on:blur={onBlur}
+      on:compositionstart={() => (composing = true)}
+      on:compositionend={() => { composing = false; tokenizeInput(); }}
+
+      autocapitalize="off" autocorrect="off" autocomplete="off"
+      inputmode="text" enterkeyhint="done" spellcheck="false"
+      aria-autocomplete="list"
+      aria-expanded={show && filtered.length > 0}
+      aria-haspopup="listbox"
+    />
+  </div>
 
   {#if show}
-    <div class="suggestions" role="listbox" aria-label="tag suggestions">
-      {#if suggestions.length === 0 && normalize(q)}
-        <div class="hint">Press Enter to add “{normalize(q)}”</div>
-      {:else}
-        {#each suggestions as s, i (s)}
-          <button
-            type="button"
-            class:selected={i === activeIdx}
+    {#if filtered.length === 0 && needle}
+      <!-- div class="suggestion-hint">Press Enter to add “{needle}”</div -->
+      <div class="suggestion-hint"></div>
+    {:else if filtered.length > 0}
+      <ul class="suggestions" role="listbox">
+        {#each filtered as s, i (s)}
+          <li
             role="option"
             aria-selected={i === activeIdx}
-            title={tags.includes(s) ? 'Already added' : `Add ${s}`}
-            on:mousedown|preventDefault={() => {
-              // Multi-select: click adds; keep open
-              addTag(s);
-              q = '';
-              activeIdx = -1;
-              show = true;
-              inputEl?.focus();
-            }}
-          >{s}</button>
+            class:selected={i === activeIdx}
+            on:mousedown|preventDefault={() => chooseSuggestion(s)}
+            on:touchstart|preventDefault={() => chooseSuggestion(s)}
+          >{s}</li>
         {/each}
-      {/if}
-    </div>
+      </ul>
+    {/if}
   {/if}
 </div>
 
 <style>
-  .chips {
-    display: flex; flex-wrap: wrap; gap: .5rem;
-    align-items: center; position: relative;
-  }
-  .chip {
-    display: inline-flex; align-items: center; gap: .35rem;
-    padding: .25rem .5rem; border-radius: 12px;
-    background: var(--chip-bg, #2a2a2a); color: #ddd;
-  }
-  .x { background: none; border: none; color: #b00020; cursor: pointer; }
+  /* Let the UA use proper colors for form controls in both themes */
+  .tag-input { position: relative; color-scheme: light dark; }
 
-  .chip-input {
-    min-width: 140px; padding: .4rem .5rem;
-    border: 1px solid #2a2a2a; border-radius: 6px;
-    background: #1f1f1f; color: #ddd;
+  /* ---------- Light defaults ---------- */
+  .pill {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--mv-border, #ddd);
+    border-radius: 10px;
+    background: var(--mv-surface, #fff);
+    color: var(--mv-text, #111);
+  }
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--mv-chip, #eee);
+    color: var(--mv-chip-fg, #222);
+    max-width: 100%;
+    font-size: 14px;
+  }
+  .tag .x {
+    border: 0; background: transparent; color: inherit;
+    cursor: pointer; line-height: 1; font-size: 14px; padding: 0 2px;
+  }
+  .tag-text-input {
+    min-width: 120px; flex: 1 0 120px;
+    border: 0; outline: 0; background: transparent;
+    font: inherit; font-size: 16px; /* avoid iOS zoom */
+    padding: 4px 0;
+    color: var(--mv-input-fg, #111);
+    caret-color: var(--mv-input-fg, #111);
+  }
+  .tag-text-input::placeholder {
+    color: var(--mv-muted, #6b7280);
+  }
+
+  .suggestion-hint,
+  .suggestions {
+    position: absolute;
+    left: 8px; right: 8px; top: calc(100% + 4px);
+    border-radius: 12px;
+    z-index: var(--mv-z-popover, 1400); /* raise above drawer */
+  }
+  .suggestion-hint {
+    padding: 10px 12px;
+    color: var(--mv-muted, #666);
+    background: var(--mv-surface, #fff);
+    border: 1px dashed var(--mv-border, #ddd);
+  }
+  .suggestions {
+    max-height: min(40svh, 240px);
+    overflow: auto;
+    background: var(--mv-menu, #fff);
+    border: 1px solid var(--mv-border, #ddd);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+    color: var(--mv-text, #111);
+  }
+  .suggestions li {
+    padding: 10px 12px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .suggestions li.selected,
+  .suggestions li:hover,
+  .suggestions li:focus {
+    background: var(--mv-hover, #f3f3f3);
     outline: none;
   }
 
-  .suggestions {
-    position: absolute; left: 0; top: calc(100% + 4px); z-index: 10;
-    display: grid; gap: 2px; min-width: 240px; max-height: 220px; overflow: auto;
-    background: #1b1b1b; border: 1px solid #2a2a2a; border-radius: 6px; padding: 4px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  /* ---------- Dark theme (system) ---------- */
+  @media (prefers-color-scheme: dark) {
+    .pill {
+      border-color: var(--mv-border, #2a2a2a);
+      background: var(--mv-surface, #121212);
+      color: var(--mv-text, #eaeaea);
+    }
+    .tag { background: var(--mv-chip, #2a2a2a); color: var(--mv-chip-fg, #eaeaea); }
+    .tag .x { color: var(--mv-chip-fg, #cfcfcf); }
+
+    .tag-text-input {
+      color: var(--mv-input-fg, #f5f5f5);
+      caret-color: var(--mv-input-fg, #f5f5f5);
+    }
+    .tag-text-input::placeholder { color: var(--mv-muted, #9aa0a6); }
+
+    .suggestion-hint {
+      background: var(--mv-menu, #1b1b1b);
+      border-color: var(--mv-border, #2a2a2a);
+      color: var(--mv-muted, #9aa0a6);
+    }
+    .suggestions {
+      background: var(--mv-menu, #1b1b1b);
+      border-color: var(--mv-border, #2a2a2a);
+      color: var(--mv-text, #eaeaea);
+    }
+    .suggestions li.selected,
+    .suggestions li:hover,
+    .suggestions li:focus {
+      background: var(--mv-hover, #242424);
+    }
   }
-  .suggestions > button {
-    text-align: left; background: none; border: none; color: #ddd;
-    padding: .35rem .5rem; border-radius: 4px; cursor: pointer;
+
+  /* ---------- Dark theme (app toggle) ---------- */
+  :global([data-theme="dark"]) .pill {
+    border-color: var(--mv-border, #2a2a2a);
+    background: var(--mv-surface, #121212);
+    color: var(--mv-text, #eaeaea);
   }
-  .suggestions > button.selected,
-  .suggestions > button:hover { background: #2a2a2a; }
-  .hint { color: #aaa; padding: .35rem .5rem; }
+  :global([data-theme="dark"]) .tag {
+    background: var(--mv-chip, #2a2a2a);
+    color: var(--mv-chip-fg, #eaeaea);
+  }
+  :global([data-theme="dark"]) .tag .x { color: var(--mv-chip-fg, #cfcfcf); }
+  :global([data-theme="dark"]) .tag-text-input {
+    color: var(--mv-input-fg, #f5f5f5);
+    caret-color: var(--mv-input-fg, #f5f5f5);
+  }
+  :global([data-theme="dark"]) .tag-text-input::placeholder { color: var(--mv-muted, #9aa0a6); }
+  :global([data-theme="dark"]) .suggestion-hint {
+    background: var(--mv-menu, #1b1b1b);
+    border-color: var(--mv-border, #2a2a2a);
+    color: var(--mv-muted, #9aa0a6);
+  }
+  :global([data-theme="dark"]) .suggestions {
+    background: var(--mv-menu, #1b1b1b);
+    border-color: var(--mv-border, #2a2a2a);
+    color: var(--mv-text, #eaeaea);
+  }
+  :global([data-theme="dark"]) .suggestions li.selected,
+  :global([data-theme="dark"]) .suggestions li:hover,
+  :global([data-theme="dark"]) .suggestions li:focus {
+    background: var(--mv-hover, #242424);
+  }
 </style>

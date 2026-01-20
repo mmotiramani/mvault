@@ -16,18 +16,103 @@
   // >>> NEW: reveal store & helpers
   import { revealedId, toggleReveal, hideAll, attachRevealAutoHideHandlers } from '../lib/ui/reveal';
 
-  export let selectedId: string | null;
-  export let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
+  let selectedId: string | null;
+  let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   //export let item: VaultItem; // incoming item (for consistency with your props)
 
   // If not already declared, declare entry like this:
-  export let entry: { item: VaultItem; payload: VaultItemPayload } | null | undefined;
+  export let entry: { item: any; payload: any } | null;
+  export let entryId: string;   // used by your reveal logic
+  
+ let allTags: string[] = []; // pass from parent or compute
+
+
+  // Props provided by parent
+//  export let entry;     // { payload: { name, username, password, url, tags, notes, ... }, ... }
+  export let fieldErrors: { name?: string; url?: string; notes?: string ;tags?: string; username?: string } = {};
+  //name, username, password, url, tags, notes
+  export let saving: boolean = false;     // parent controls while persisting
+
+  const dispatch = createEventDispatcher();
+
+
+  // Local editable copies (re-init when a different entry loads)
+  let username = entry?.payload?.username ?? '';
+  let name = entry?.payload?.name ?? '';
+  
+  let password = entry?.payload?.password ?? '';
+  let url      = entry?.payload?.url ?? '';
+  let notes    = entry?.payload?.notes ?? '';
+  $: if (entry?.payload) {
+    name = entry.payload.name ?? '';
+    username = entry.payload.username ?? '';
+    password = entry.payload.password ?? '';
+    url      = entry.payload.url ?? '';
+    notes    = entry.payload.notes ?? '';
+  }
+
+  // Tags: local copy bound to TagChips; write back on change
+  let tags: string[] = [];
+  $: if (entry?.payload) tags = entry.payload.tags ?? [];
+  $: allTags = $session.allTags ?? [];
+
+
+  // ---------- Helpers ----------
+  function onFieldInput(field: 'username'|'password'|'url'|'notes'|'name', value: string) {
+    if (!entry?.payload) return;
+    entry.payload[field] = value;
+    if (field === 'password') password = value;
+    if (field === 'url') url = value;
+    if (field === 'username') username = value;
+    if (field === 'name') name = value;
+    if (field === 'notes') notes = value;
+    dispatch('dirty');
+  }
+
+  function onTagsChange() {
+    if (entry?.payload) entry.payload.tags = tags;
+    dispatch('dirty');
+  }
+
+  const close = () => dispatch('close');
+  const save  = () => dispatch('save');
+
+  function normalizedHref(raw: string) {
+    if (!raw) return '#';
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
+    return hasScheme ? raw : `https://${raw}`;
+
+  /* 
+  method 2
+   if (!u) return '';
+    try { return new URL(u, location.origin).href; }
+    catch { return `https://${u}`; }
+
+    method 3
+   if (!u) return '';
+    try {
+      const url = new URL(u, location.origin);
+      return url.href;
+    } catch {
+      return `https://${u}`;
+    }
+  */
+  }
+
+    // ------------ URL helpers ------------
+  
+
+  async function copyToClipboard(text: string) {
+    try { await navigator.clipboard?.writeText(text); } catch {}
+  }
+
+  
 
   // Add this reactive derived id:
   $: entryId = entry?.item.id ?? '';
 
    // Local entry (selected)
-  $: entry = entries.find((e) => e.item.id === selectedId);
+  //$: entry = entries.find((e) => e.item.id === selectedId);
  
 
   // Keep a snapshot of the original payload, 
@@ -55,7 +140,7 @@
 
 
  // Events
-  const dispatch = createEventDispatcher<{ close: void; updated: { id: string; item: VaultItem; payload: VaultItemPayload } }>();
+ // const dispatch = createEventDispatcher<{ close: void; updated: { id: string; item: VaultItem; payload: VaultItemPayload } }>();
 
   
   const s = get(session);
@@ -68,32 +153,43 @@
   // Editable fields (bind to inputs)
 
   //let key: CryptoKey | null = null;
-  let name = '';
-  let username = '';
-  let password = '';
-  let url = '';
-  let tags: string[] = [];
-  let notes = '';
+  //let name = '';
+  //let username = '';
+  //let password = '';
+  //let url = '';
+  //let tags: string[] = [];
+  //let notes = '';
 
   // UI State
   let loading = true;
-  let saving = false;
+//  let saving = false;
   let errorMsg = '';
-  let fieldErrors: Record<string, string> = {};
+  //let fieldErrors: Record<string, string> = {};
   let isDirty = false;
 
 
  
 // Initialize form when entry changes
-  $: if (entry) {
+  $: if (entry?.payload) {
     name = entry.payload.name ?? '';
     username = entry.payload.username ?? '';
     password = entry.payload.password ?? '';
     url = entry.payload.url ?? '';
-    tags = (entry.payload.tags ?? []).slice();
+    const incoming = entry.payload.tags ?? [];
+    // Only copy if different (avoids loops)
+    if (JSON.stringify(incoming) !== JSON.stringify(tags)) {
+      tags = [...incoming];
+    }
+    //tags = (entry.payload.tags ?? []).slice();
     notes = entry.payload.notes ?? '';
     fieldErrors = {};
     isDirty = false;
+  }
+
+
+  // Keep payload in sync with local edits
+  $: if (entry?.payload) {
+    entry.payload.tags = tags;
   }
 
   
@@ -107,7 +203,7 @@
     (e.target as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
-
+  
   function markDirty() {
     isDirty = true;
     validate();
@@ -116,7 +212,7 @@
   function validate() {
     fieldErrors = {};
     const errs = validatePayload({ name, username, password, url, tags, notes });
-    for (const e of errs) fieldErrors[e.field] = e.message;
+    // temporary commenting : for (const e of errs) fieldErrors[e.field] = e.message;
   }
 
 
@@ -193,22 +289,7 @@
     if (entry) await copyWithTemporaryOverwrite(entry.payload.password, 15_000);
   }
 
-  // ------------ URL helpers ------------
-  function normalizedHref(u?: string) {
-
-    if (!u) return '';
-    try { return new URL(u, location.origin).href; }
-    catch { return `https://${u}`; }
-
-/*    if (!u) return '';
-    try {
-      const url = new URL(u, location.origin);
-      return url.href;
-    } catch {
-      return `https://${u}`;
-    }
-  */
-    }
+  
 
   async function onCopyUrl() {
     if (url) await copyWithTemporaryOverwrite(url, 8_000);
@@ -239,6 +320,12 @@
     entry = { ...entry, payload: updated };
     await refreshTags(); // refresh tag cache if tags can change elsewhere
   });
+
+
+  // TEMP DEBUG — log when entry and allTags change
+  $: console.debug('[ItemDrawer] entry name =', entry?.payload?.name);
+  $: console.debug('[ItemDrawer] allTags length =', allTags?.length, allTags?.slice?.(0, 10));
+
 </script>
 
 
@@ -250,6 +337,7 @@
     <header>
       <h2>Name : {entry.payload.name}</h2>
       <button class="close" on:click={() => dispatch('close')}>Close</button>
+      {#if fieldErrors?.name}<div class="error">{fieldErrors.name}</div>{/if}
       <!-- button class="close" on:click={() => dispatch('close')}>Close</button -->
     </header>
 
@@ -259,7 +347,7 @@
         class="title-input"
         type="text"
         bind:value={name}
-        on:input={markDirty}
+        on:input={(e) => onFieldInput('name', (e.target as HTMLInputElement).value)}
         placeholder="Entry name"
         aria-label="Entry name"
       />
@@ -269,9 +357,10 @@
       <input
         type="text"
         bind:value={username}
-        on:input={markDirty}
+        on:input={(e) => onFieldInput('username', (e.target as HTMLInputElement).value)}
         autocomplete="username"
         placeholder="Username"
+        aria-label="Entry username"
       />
     </div>
 
@@ -281,7 +370,7 @@
         <input
           type={$revealedId === entryId ? 'text' : 'password'}
           bind:value={password}
-          on:input={markDirty}
+          on:input={(e) => onFieldInput('password', (e.target as HTMLInputElement).value)}
           on:blur={() => hideAll()}
         />
         <!-- Toggle on press-and-hold: reveal on press, hide on release/leave -->
@@ -308,14 +397,45 @@
       {/if}
     </div>
 
+  <section class="field">
+    <label for="url">URL</label>
+    <div class="row">
+      <input id="url" class="text"
+        bind:value={url}
+        on:input={(e) => onFieldInput('url', (e.target as HTMLInputElement).value)}
+        inputmode="url" enterkeyhint="go" />
+      <a class="btn" href={normalizedHref(url)} on:click={(e) => { if (!url) e.preventDefault(); }}>Open</a>
+      <button class="btn" type="button" on:click={() => copyToClipboard(url)} disabled={!url}>Copy</button>
+    </div>
+    {#if fieldErrors?.url}<div class="error">{fieldErrors.url}</div>{/if}
+  </section>
+
+  <section class="field">
+    <label for="tags">Tags</label>
+    <TagChips bind:tags={tags} {allTags} on:change={onTagsChange} />
+  </section>
+
+  <section class="field">
+    <label for="notes">Notes</label>
+    <textarea id="notes" class="notes"
+      bind:value={notes}
+      on:input={(e) => onFieldInput('notes', (e.target as HTMLTextAreaElement).value)}
+      maxlength={4000} rows={6} />
+    <div class="muted">{(notes ?? '').length}/4000</div>
+    {#if fieldErrors?.notes}<div class="error">{fieldErrors.notes}</div>{/if}
+  </section>
+
+
     <!-- NEW: URL -->
-    <div class="field">
+    <!-- div class="field">
       <label>URL</label>
       <div class="url">
         <input 
           type="text"
           bind:value={url}
           on:input={markDirty}
+          on:input={(e) => onFieldInput('url', (e.target as HTMLInputElement).value)}
+                inputmode="url" enterkeyhint="go" />
           on:focus={ensureVisible}
           placeholder="https://example.com"
         />
@@ -332,41 +452,55 @@
       </div>
       {#if fieldErrors.url}<small class="error">{fieldErrors.url}</small>{/if}
     </div>
-
     <div class="field">
       <label>Tags</label>
-      <TagChips bind:tags on:change={() => { isDirty = true; }} />
+      <TagChips
+        bind:tags={tags}
+        {allTags}
+        on:change={() => {onTagsChange
+          // push local edits back to payload
+          //if (entry?.payload) entry.payload.tags = tags;
+          //isDirty = true;
+        }}
+      /-->
+      <!-- TagChips bind:tags on:change={() => { isDirty = true; }} / -->
       <!-- TagChips 
             item={entry.item} 
             payload={{ ...entry.payload, tags }}
             on:changed={onTagsChanged}/ -->
         <!--</TagChips>>    payload={entry.payload} 
             on:changed={(e) => entry = { ...entry!, payload: e.detail }} --> 
-    </div>
+    <!--/div -->
 
     <!-- NEW: Notes -->
-    <div class="field">
+    <!--div class="field">
       <label>Notes</label>
       <textarea
         bind:value={notes}
         rows="6"
         maxlength="4000"
         on:focus={ensureVisible}
-        on:input={markDirty}
+        on:input={(e) => onFieldInput('notes', (e.target as HTMLTextAreaElement).value)}
         placeholder="Add notes (up to ~4000 chars)"
       />
       <small>{(notes || '').length}/4000</small>
       {#if fieldErrors.notes}<small class="error">{fieldErrors.notes}</small>{/if}
-    </div>
+    </div -->
 
 
     <!-- Validation messages (name/url shown near fields) -->
     {#if fieldErrors.name}<div class="error">Name: {fieldErrors.name}</div>{/if}
     <!-- Actions -->
     <footer class="mv-drawer-actions">
-      <button class="btn ghost"    on:click={onCancel} disabled={saving}>Cancel</button>
+ 
+      <button class="btn secondary" on:click={close}>Cancel</button>
+      <button class="btn primary" on:click|preventDefault={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+
+    <!--button class="btn ghost"    on:click={onCancel} disabled={saving}>Cancel</button>
       <button class="btn primary"  on:click={onSave}   disabled={!isDirty || saving || Object.keys(fieldErrors).length > 0}>
-        {saving ? 'Saving…' : 'Save'}</button>
+        {saving ? 'Saving…' : 'Save'}</button -->
     </footer>
 
     <!-- Actions 
@@ -382,6 +516,13 @@
 
 
 <style>
+ :global(.drawer),
+  :global(.drawer-content),
+  :global(.drawer-body) {
+    position: relative;
+    overflow: visible;
+    z-index: 0;
+  }
   .drawer { padding: 1rem; overscroll-behavior: contain; }
   header { display:flex; justify-content:space-between; align-items:center; gap:.75rem; }
   .title-input {
@@ -438,5 +579,22 @@
   .btn.ghost   { background: transparent; }
   .btn.primary { background: var(--accent, #2563eb); color: white; border-color: transparent; }
   .btn:disabled { opacity: .6; cursor: default; }
+
+
+  .drawer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .title { margin:0; font-size:1.1rem; }
+  .icon-btn { background:none; border:0; font-size:20px; cursor:pointer; color:inherit; }
+  .field { margin:14px 0; display:flex; flex-direction:column; gap:8px; }
+  .text, .notes { width:100%; font-size:16px; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .gen { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); padding:8px; border:1px solid var(--border, #2a2a2a); border-radius:8px; }
+  .gen .len { display:flex; align-items:center; gap:8px; grid-column:1/-1; }
+  .btn { padding:6px 10px; }
+  .btn.small { padding:4px 8px; font-size:0.9rem; }
+  .error { color: var(--danger, #d33); font-size: 0.9rem; }
+  .muted { color: var(--muted, #888); font-size: 0.85rem; }
+  .drawer-footer { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  :global(.drawer), :global(.drawer-content), :global(.drawer-body) { position: relative; overflow: visible; z-index: 0; }
+
 </style>
 

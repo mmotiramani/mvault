@@ -6,7 +6,36 @@
   import type { VaultItemPayload } from '../lib/data/types';
   import { generatePassword, type PwdOpts } from '../lib/utils/passwords';
 
-    const dispatch = createEventDispatcher<{ close: void; created: void }>();
+  import TagChips from './TagChips.svelte';
+  // Provide allTags from your app state. If you already had a source list for
+  // suggestions, pass it in as allTags.
+  let allTags: string[] = [];
+
+  
+  
+  export let creating: boolean = false; // parent can control while persisting
+
+
+ 
+  // Props provided by parent
+  let entry;     // { payload: { name, username, password, url, tags, notes, ... }, ... }
+  let entryId;   // used by your reveal logic
+  export let fieldErrors: { name?: string; url?: string; notes?: string } = {};
+  //export let saving: boolean = false;     // parent controls while persisting
+
+ 
+
+  const dispatch = createEventDispatcher();
+
+
+  //export let allTags = ['security', 'secret', 'server', 'prod', 'staging', 'personal'];
+
+
+  // Get the taglist from session (reactive)
+  $: allTags = $session.allTags ?? [];
+
+
+    //const dispatch = createEventDispatcher<{ close: void; created: void }>();
 
     let name = '';
     let username = '';
@@ -23,13 +52,25 @@
         symbols: true,
         avoidAmbiguous: true
     };
-
+  
     let nameEl: HTMLInputElement;
-    let tagInputEl: HTMLInputElement;
+    //let tagInputEl: HTMLInputElement;
     let suggestions: string[] = [];
     let showSuggestions = false;
     let selectedSuggestionIndex = -1;
     let isSelectingSuggestion = false;
+
+
+    const markDirty = () => dispatch('dirty');
+    const close = () => dispatch('close');
+    const create = () => dispatch('created', { payload: { name, username, password, url, tags, notes } });
+
+    function normalizedHref(raw: string) {
+        if (!raw) return '#';
+        const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
+        return hasScheme ? raw : `https://${raw}`;
+    }
+    async function copyToClipboard(text: string) { try { await navigator.clipboard?.writeText(text); } catch {} }
 
     onMount(() => {
         nameEl?.focus();
@@ -54,7 +95,7 @@
             .slice(0, 8);
     }
 
-    function onTagInput(e: Event) {
+    /*function onTagInput(e: Event) {
         const target = e.target as HTMLInputElement;
         tagInput = target.value;
         selectedSuggestionIndex = -1;
@@ -127,11 +168,12 @@
                 showSuggestions = false;
                 selectedSuggestionIndex = -1;
             }, 150);
-        }*/
+        }
     }
-
+*/
     function gen() {
         password = generatePassword(pwdOpts);
+        markDirty();
     }
 
     async function save() {
@@ -151,6 +193,7 @@
             await createItem($session.key, id, payload);
 
             await refreshTags();
+            //isDirty = false;
 
             dispatch('created');
             close();
@@ -159,10 +202,18 @@
         }
     }
 
-    function close() {
+   /* function close() {
         dispatch('close');
     }
+        */
+    const DEV = import.meta.env.DEV;
+
+    
+    
+
 </script>
+
+{#if DEV}{allTags.length} known tags{/if}
 
 <div class="drawer-overlay" on:click={close} role="presentation">
     <div class="drawer" on:click|stopPropagation role="dialog" aria-label="New Entry">
@@ -178,6 +229,7 @@
                     id="name"
                     bind:this={nameEl}
                     bind:value={name}
+                    on:input={markDirty}
                     type="text"
                     placeholder="e.g., GitHub"
                     required
@@ -189,6 +241,7 @@
                 <input
                     id="username"
                     bind:value={username}
+                    on:input={markDirty}
                     type="text"
                     placeholder="your username or email"
                 />
@@ -200,6 +253,7 @@
                     <input
                         id="password"
                         bind:value={password}
+                        on:input={markDirty}
                         type="text"
                         placeholder="enter or generate"
                     />
@@ -236,19 +290,27 @@
                 </label>
             </div>
 
-            <div class="form-group">
-                <label for="url">URL</label>
-                <input
-                    id="url"
-                    bind:value={url}
-                    type="url"
-                    placeholder="https://example.com"
-                />
-            </div>
-
-            <div class="form-group">
+            
+        <section class="field">
+        <label for="url">URL</label>
+        <div class="row">
+            <input id="url" class="text"
+            bind:value={url}
+            on:input={markDirty}
+            inputmode="url" enterkeyhint="go" />
+            <a class="btn" href={normalizedHref(url)} on:click={(e) => { if (!url) e.preventDefault(); }}>Open</a>
+            <button class="btn" type="button" on:click={() => copyToClipboard(url)} disabled={!url}>Copy</button>
+        </div>
+        {#if fieldErrors?.url}<div class="error">{fieldErrors.url}</div>{/if}
+        </section>  
+            <!-- div class="form-group">
                 <label for="tag-input">Tags</label>
-                <div class="tag-input-wrapper">
+                <TagChips
+                bind:tags={tags}
+                {allTags}
+                on:change={() => (isDirty = true)}
+                / -->
+                <!-- div class="tag-input-wrapper">
                     <div class="tag-chips">
                         {#each tags as tag (tag)}
                             <div class="tag-chip">
@@ -294,14 +356,20 @@
                             </div>
                         {/if}
                     </div>
-                </div>
-            </div>
+                </div 
+            </div -->
+
+            <section class="field">
+            <label for="tags">Tags</label>
+            <TagChips bind:tags={tags} {allTags} on:change={markDirty} />
+            </section>
 
             <div class="form-group">
                 <label for="notes">Notes</label>
                 <textarea
                     id="notes"
                     bind:value={notes}
+                    on:input={markDirty}
                     placeholder="Additional notes (max 4000 chars)"
                     maxlength="4000"
                     rows="4"
@@ -311,15 +379,27 @@
         </div>
 
         <div class="drawer-footer">
-            <button class="btn btn-secondary" on:click={close}>Cancel</button>
+            <!--button class="btn btn-secondary" on:click={close}>Cancel</button>
             <button class="btn btn-primary" on:click={save} disabled={!name.trim()}>
                 Create Entry
-            </button>
+            </button-->
+
+            <button class="btn secondary" on:click={close}>Cancel</button>
+            <button class="btn primary" on:click|preventDefault={create} disabled={creating}>
+                {creating ? 'Creating…' : 'Create Entry'}
         </div>
     </div>
 </div>
 
 <style>
+    :global(.drawer),
+    :global(.drawer-content),
+    :global(.drawer-body) {
+        position: relative;
+        overflow: visible;
+        z-index: 0;
+    }
+
     .drawer-overlay {
         position: fixed;
         inset: 0;
@@ -706,4 +786,20 @@
             font-size: 16px;
         }
     }
+
+.drawer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .title { margin:0; font-size:1.1rem; }
+  .icon-btn { background:none; border:0; font-size:20px; cursor:pointer; color:inherit; }
+  .field { margin:14px 0; display:flex; flex-direction:column; gap:8px; }
+  .text, .notes { width:100%; font-size:16px; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .gen { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); padding:8px; border:1px solid var(--border, #2a2a2a); border-radius:8px; }
+  .gen .len { display:flex; align-items:center; gap:8px; grid-column:1/-1; }
+  .btn { padding:6px 10px; }
+  .btn.small { padding:4px 8px; font-size:0.9rem; }
+  .error { color: var(--danger, #d33); font-size: 0.9rem; }
+  .muted { color: var(--muted, #888); font-size: 0.85rem; }
+  .drawer-footer { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  :global(.drawer), :global(.drawer-content), :global(.drawer-body) { position: relative; overflow: visible; z-index: 0; }
+
 </style>
