@@ -31,6 +31,23 @@
   let showChangePass = false;
 
 
+// ---- Filtering helpers ----
+  const norm = (s: unknown) =>
+    (s == null ? '' : String(s))
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/\p{Diacritic}/gu, '');
+  // UI state
+  let q = '';                       // search query
+  let selectedTags: string[] = [];  // filter by tags
+
+  function toggleTag(t: string) {
+    t = t.toLowerCase();
+    selectedTags = selectedTags.includes(t) ? selectedTags.filter(x => x !== t) : [...selectedTags, t];
+    resetEditContext();
+    void refresh();
+
+  }
   //let entries: Array<{ item: VaultItem; payload: VaultItemPayload }> = [];
   let selectedId: string | null = null;
   let matchAll = false; // false = OR, true = AND
@@ -40,6 +57,7 @@
     void refresh();
   
   }
+  
   // ...
 
   //make tags availability generic for mobile/desktop and make the unified drawer Item and New
@@ -88,17 +106,7 @@
   // selectedId ? (entries.find(r => r.item.id === selectedId) ?? null) : null;
 
 
-  // UI state
-  let q = '';                       // search query
-  let selectedTags: string[] = [];  // filter by tags
 
-  function toggleTag(t: string) {
-    t = t.toLowerCase();
-    selectedTags = selectedTags.includes(t) ? selectedTags.filter(x => x !== t) : [...selectedTags, t];
-    resetEditContext();
-    void refresh();
-
-  }
 
   function clearFilters() { 
     q = ''; 
@@ -107,6 +115,54 @@
     void refresh();
 
   }
+
+
+  function computeVisible(opts?: { text?: string }) {
+    const text = norm(opts?.text ?? q);
+    const tokens = text.split(/\s+/).filter(Boolean);
+    const want = (selectedTags ?? []).map(norm);
+    visible = (entries ?? []).filter(({ payload }) => {
+      // build haystack
+      const hay = norm(
+        `${payload.name} ${payload.username ?? ''} ${payload.url ?? ''} ${payload.notes ?? ''} ${(payload.tags ?? []).join(' ')}`
+      );
+
+      // Text: AND across tokens
+      const okText = tokens.length === 0 || tokens.every(t => hay.includes(t));
+
+      // Tags: ANY vs ALL (using your matchAll + selectedTags)
+      const pTags = new Set((payload.tags ?? []).map(norm));
+      const want  = (selectedTags ?? []).map(norm);
+
+      const okTags =
+        want.length === 0 ||
+        (matchAll ? want.every(t => pTags.has(t)) : want.some(t => pTags.has(t)));
+
+      return okText && okTags;
+    });
+  }
+
+
+  // --- Close & rollback drawers when filters change ---
+  function closeDrawersAndRollback() {
+    // Close New Entry drawer
+    if (showNew) showNew = false;
+
+    // Close Item drawer + clear selection
+    if (selectedId) {
+      selectedId = null;
+      selectedRow = null;
+      // optional: force remount next time
+      editVersion = (editVersion ?? 0) + 1;
+    }
+  }
+
+  // --- Called by UI (search, tag chips, ALL/ANY) ---
+  function onFiltersChanged(opts?: { text?: string }) {
+    computeVisible(opts);
+    closeDrawersAndRollback();
+  }
+
 
 //tiny “edit context reset” + a key to remount the drawer
 let editVersion = 0;  // bumping this forces the drawer to remount (discarding unsaved state)
@@ -124,7 +180,9 @@ async function refresh() {
   entries = await listItems<any>(key);
   visible = entries;
   if (selectedId) selectedRow = entries.find(e => e.item.id === selectedId) ?? null;
-  
+  // ✅ Recompute filtered list now that entries changed
+    computeVisible(); // will use current `search`, `selectedTags`, `matchAll`
+
   /*const s = get(session);
   if (!s.key) { 
     entries = []; 
@@ -144,7 +202,39 @@ async function refresh() {
   // Keep selectedRow up to date if the selection is still valid
   if (selectedId) {
     selectedRow = entries.find(e => e.item.id === selectedId) ?? null;
-  } */
+  } 
+    
+  async function refresh() {
+  const s = get(session);
+  if (!s.key) { entries = []; selectedId = null; return; }
+
+  const all = await listItems<VaultItemPayload>(s.key);
+
+  // Sort by the DECRYPTED payload name (guarded to avoid undefined errors)
+  entries = all.sort((a, b) =>
+    (a.payload?.name ?? '').localeCompare(b.payload?.name ?? '', undefined, { sensitivity: 'base' })
+  );
+
+  
+  }
+
+  $: visible = entries.filter(({ payload }) => {
+    const qok = !q ? true :
+      (payload.name?.toLowerCase().includes(q.toLowerCase())
+       || payload.username?.toLowerCase().includes(q.toLowerCase())
+       || payload.url?.toLowerCase().includes(q.toLowerCase())
+       || (payload.tags || []).some(t => t.includes(q.toLowerCase())));
+
+    const plTags = (payload.tags || []).map(t => t.toLowerCase());
+    const tagok =
+      selectedTags.length === 0 
+      ? true 
+      : matchAll
+        ? selectedTags.every(t => plTags.includes(t))  // AND
+        : selectedTags.some(t => plTags.includes(t));  // OR
+
+    return qok && tagok;
+  });*/
 }
 
 
@@ -281,25 +371,56 @@ async function refresh() {
     </div>
 
     <div class="toolbar">
-      <input id="mv-search" type="search" bind:value={q} placeholder="Search (/, name, user, url, tag)" />
+      <input id="mv-search" type="search" 
+        bind:value={q} 
+        placeholder="Search (/, name, user, url, tag)"         
+        on:input={() => onFiltersChanged({ text: q  })} 
+        autocapitalize="off" autocorrect="off" spellcheck="false"
+        inputmode="search" enterkeyhint="search"
+      />
       <button class="new" on:click={() => showNew = true} title="New (n)">＋</button>
 
-      <button class="match" on:click={toggleMatchMode} title="Toggle tag match mode">
+
+      <button class="toggle" on:click={() => { matchAll = !matchAll; onFiltersChanged(); }}>
         {matchAll ? 'Match: ALL' : 'Match: ANY'}
       </button>
+
+      <!--button class="match" on:click={toggleMatchMode} title="Toggle tag match mode">
+        {matchAll ? 'Match: ALL' : 'Match: ANY'}
+      </button-->
     </div>
+    <div class="count">
+      {visible.length} {visible.length <= 1 ? 'entry' : 'entries'} / {entries.length>0 ? entries.length : 'no entries'}
+      <!-- or if you prefer: {visible.length} / {entries.length} -->
+    </div>
+
 
     <!-- Tag filters from session -->
     <div class="filter-tags">
       {#if $session.allTags.length > 0}
         {#each $session.allTags as t}
+          {#key t}
           <button
-            class="t {selectedTags.includes(t) ? 'on' : ''}"
-            on:click={() => toggleTag(t)}
-          >{t}</button>
+            class:selected={selectedTags.includes(norm(t))}
+            aria-pressed={selectedTags.includes(norm(t))}
+            on:click={() => {
+              const v = norm(t);
+              selectedTags = selectedTags.includes(v)
+                ? selectedTags.filter(x => x !== v)
+                : [...selectedTags, v];
+              onFiltersChanged();      
+            }}>
+            
+
+           <!-- on:click={() => toggleTag(t)} -->
+          {t}</button>
+          {/key}
         {/each}
         {#if selectedTags.length > 0}
-          <button class="clear" on:click={clearFilters}>Clear</button>
+          <button class="clear" 
+              on:click={() => { selectedTags = []; onFiltersChanged(); }}>
+              Clear
+            </button>
         {/if}
       {/if}
     </div>
@@ -348,6 +469,41 @@ async function refresh() {
 </div>
 
 <style>
+
+.tags-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .tags-bar button {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border, #2a2a2a);
+    background: var(--chip, #222);
+    color: var(--chip-fg, #ddd);
+    cursor: pointer;
+  }
+  .tags-bar button.selected {
+    background: var(--chip-selected, #2a6);
+    color: #fff;
+    border-color: var(--chip-selected, #2a6);
+  }
+  .tags-bar button.clear {
+    background: transparent;
+    color: var(--danger-fg, #f88);
+    border-color: var(--danger-fg, #f88);
+  }
+
+  .active-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+  .active-filters .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--chip, #333);
+    color: var(--chip-fg, #eaeaea);
+    border: 1px solid var(--border, #2a2a2a);
+  }
+  .active-filters .chip .x {
+    border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 14px;
+  }
+
+  .count { margin-left: auto; color: var(--muted, #aaa); }
+
   .vault {
     display: grid;
     grid-template-columns: 320px 1fr;
@@ -475,6 +631,16 @@ async function refresh() {
   border-radius: 6px;
   padding: .4rem .6rem;
 }
+
+  .tags-bar button { margin: 0 6px 6px 0; }
+  .tags-bar button.selected {
+    background: var(--chip-selected, #2a6);
+    color: white;
+  }
+  .tags-bar button.clear {
+    background: var(--danger-bg, #333);
+    color: var(--danger-fg, #f88);
+  }
 
 
 </style>

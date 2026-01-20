@@ -37,23 +37,26 @@
 
 
   // Local editable copies (re-init when a different entry loads)
-  let username = entry?.payload?.username ?? '';
-  let name = entry?.payload?.name ?? '';
+  let username = '';
+  let name = '';
   
-  let password = entry?.payload?.password ?? '';
-  let url      = entry?.payload?.url ?? '';
-  let notes    = entry?.payload?.notes ?? '';
+  let password = '';
+  let url      = '';
+  let notes    = '';
+   // Tags: local copy bound to TagChips; write back on change
+  let tags: string[] = [];
+
   $: if (entry?.payload) {
     name = entry.payload.name ?? '';
     username = entry.payload.username ?? '';
     password = entry.payload.password ?? '';
     url      = entry.payload.url ?? '';
     notes    = entry.payload.notes ?? '';
+    tags     = entry.payload.tags ?? [];
   }
 
-  // Tags: local copy bound to TagChips; write back on change
-  let tags: string[] = [];
-  $: if (entry?.payload) tags = entry.payload.tags ?? [];
+ 
+  //$: if (entry?.payload) tags = entry.payload.tags ?? [];
   $: allTags = $session.allTags ?? [];
 
 
