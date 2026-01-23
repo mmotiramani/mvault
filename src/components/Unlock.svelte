@@ -107,13 +107,15 @@
   .field.passphrase { display: grid; gap: .35rem; }
   .field.passphrase label { font-weight: 600; }
 
-  .input-wrap { position: relative; display: grid; }
+  .input-wrap { 
+    position: relative; 
+    display: grid; 
 
   /* 1) Drive spacing from variables so input padding = eye size + gap (no extra space) */
-  .input-wrap {
+
     --eye-size: 32px;   /* desktop/laptop default (tweak 30–36 if you prefer) */
     --eye-gap: 8px;     /* space between eye and input’s right edge */
-    --eye-pad: 4px;     /* breathing room inside the text field before the eye */
+    --eye-pad: 6px;     /* breathing room inside the text field before the eye */
   }
 
   .input-wrap input {
@@ -124,6 +126,8 @@
     padding: .6rem .75rem;
     font-size: 16px;          /* avoid iOS zoom */
     padding-right: calc(var(--eye-size) + var(--eye-gap) + var(--eye-pad));   /* space for the eye button */
+    position: relative;
+    z-index: 0;
   }
 
 
@@ -142,6 +146,10 @@
     color: var(--muted, #9aa0a6);
     border-radius: 8px;    /* rounded hover shape */
     cursor: pointer;
+    z-index: 1;                      /* ✅ sits above input */
+    pointer-events: auto;
+    touch-action: manipulation;       /* ✅ faster tap handling */
+    -webkit-tap-highlight-color: transparent;
   }
 
 
@@ -171,7 +179,14 @@
   }
   /* 3) Mobile touch target: bigger eye, input padding follows automatically */
   @media (max-width: 700px) {
-    .input-wrap { --eye-size: 44px; --eye-gap: 8px; --eye-pad: 4px; }
+    .input-wrap { --eye-size: 44px; --eye-gap: 8px; --eye-pad: 6px; }
+  }
+/* slightly inflate the invisible hitbox of the eye without changing how it looks:Clicks still go to the button itself; the pseudo‑element just extends the target.*/
+  .eye::after {
+    content: '';
+    position: absolute;
+    inset: -6px;           /* expands the clickable area by 6px on all sides */
+    border-radius: 10px;   /* keep roundish hitbox */
   }
 
 </style>
