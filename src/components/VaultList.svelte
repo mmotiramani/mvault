@@ -17,6 +17,7 @@
 //make tags availability generic for mobile/desktop and make the unified drawer Item and New
   import { get, writable } from 'svelte/store';
   import { refreshTags, session } from '../lib/app/session';
+  import onImportUpload from '../App.svelte';
 
   const uiDirty = writable(false);
   const markDirty = () => uiDirty.set(true);
@@ -121,6 +122,10 @@
     const text = norm(opts?.text ?? q);
     const tokens = text.split(/\s+/).filter(Boolean);
     const want = (selectedTags ?? []).map(norm);
+
+    // Reuse one collator (case/locale-aware, natural ordering)
+    const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
     visible = (entries ?? []).filter(({ payload }) => {
       // build haystack
       const hay = norm(
@@ -137,9 +142,23 @@
       const okTags =
         want.length === 0 ||
         (matchAll ? want.every(t => pTags.has(t)) : want.some(t => pTags.has(t)));
-
+      console.debug('[mvault] before returning length:', visible.length);
       return okText && okTags;
+
     });
+  
+    // 2) Sort by NAME only (ascending)
+    visible.sort((a, b) =>
+      nameCollator.compare(a.payload?.name ?? '', b.payload?.name ?? '')
+    );
+
+    console.debug('[mvault] testing sorted length:', visible.length);
+
+    if (selectedId && !visible.some(({ item }) => item.id === selectedId)) {
+      selectedId = null;
+    }
+
+    
   }
 
 
@@ -292,6 +311,18 @@ async function refresh() {
   */
 
 
+function onImportFile(e: Event) {
+  //const input = e.target as HTMLInputElement;
+  //const file = input.files?.[0];
+ 
+  onImportUpload: (e: Event) => Promise<void>;
+
+
+  //if (!file) return;
+  // your import logic (parse + persist)
+  //input.value = ''; // allow re-selecting the same file later
+}
+
   function isEditableTarget(el: Element | null) {
     if (!el) return false;
     const tag = (el as HTMLElement).tagName;
@@ -354,17 +385,17 @@ async function refresh() {
   });
 </script>
 
-<div class="vault uses-full-height">
+<div class="vault uses-full-height" style="display:grid; grid-template-columns: 340px 1fr; gap:1rem;">
   <aside class="sidebar">
     
     <div class="mv-toolbar">
       <button class="btn ghost"   on:click={openChangePassphrase}>Change Passphrase</button>
       <!-- ADD: Mount the dialog once at root so it overlays everything -->
     <ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} />
-<!--button class="link" on:click={() => (showChangePass = true)}>Change passphrase</button -->
+  <!--button class="link" on:click={() => (showChangePass = true)}>Change passphrase</button -->
 
-<!-- ADD: Mount the dialog once at root so it overlays everything -->
-<ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} on:changed= {()=>(showToast('Passphrase changed', 'success'))} />
+  <!-- ADD: Mount the dialog once at root so it overlays everything -->
+  <ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} on:changed= {()=>(showToast('Passphrase changed', 'success'))} />
 
       <!-- button class="btn ghost"   on:click={onImport}>Import</button -->
       <button class="btn ghost"   on:click={onExport}>Export</button>
@@ -396,12 +427,21 @@ async function refresh() {
 
 
     <!-- Tag filters from session -->
-    <div class="tags-bar">
+    <div class="tags-bar" role="toolbar" aria-label="Tag filters">
+      
       {#if $session.allTags.length > 0}
+        {#if selectedTags.length > 0}
+          <button class="clear" 
+              on:click={() => { selectedTags = []; onFiltersChanged(); }}>
+              Clear
+            </button>
+        {/if}
+
         {#each $session.allTags as t}
           {#key t}
           <button
-            class:selected={selectedTags.includes(norm(t))}
+            class="t"
+            class:on={selectedTags.includes(norm(t))}  
             aria-pressed={selectedTags.includes(norm(t))}
             on:click={() => {
               const v = norm(t);
@@ -416,7 +456,7 @@ async function refresh() {
           {t}</button>
           {/key}
         {/each}
-        {#if selectedTags.length > 0}
+        {#if selectedTags.length > 0 && entries.length>20}
           <button class="clear" 
               on:click={() => { selectedTags = []; onFiltersChanged(); }}>
               Clear
@@ -425,9 +465,15 @@ async function refresh() {
       {/if}
     </div>
 
-    <div class="list">
+    <!-- ✅ Scrollable LIST: now its own grid row with its own scroll box -->
+    <div class="list" role="listbox" aria-activedescendant={selectedId ? `row-${selectedId}` : undefined}>
       {#each visible as { item, payload } (item.id)}
-        <div class="row" on:click={() => openItem({ item, payload })}>
+        <div 
+          class="row" 
+          id={"row-" + item.id}
+          class:selected={item.id === selectedId}   
+          role="option"
+          on:click={() => openItem({ item, payload })}>
         <!-- button class="row {selectedId===item.id?'active':''}" on:click={() => selectedId = item.id} -->
           <div class="name">{payload.name}</div>
           <div class="sub">{payload.username}{#if payload.url} · {payload.url}{/if}</div>
@@ -436,25 +482,42 @@ async function refresh() {
 
       {/each}      
     </div>
+
+<!--  < !-- ✅ Import bar lives in flow; no overlap -- >
+    <div class="import-bar">
+      < !-- If your Import control is in App.svelte, move it here for zero overlap -- >
+      <label class="import">
+        <span>Import</span>
+        <input type="file" accept=".mvault,application/json" on:change={onImportFile} />
+      </label>
+    </div>
+    < !-- ⬆⬆ end LEFT markup paste ⬆⬆ -- > -->
+
   </aside>
 
 
-<!-- List -->
+  <!-- List -->
 
-
+  <main class="detail">
   <!-- Drawers -->
   <!-- NEW ENTRY -->
   {#if showNew}
+
+   <!-- Drawer hosted inline on desktop; overlay via CSS on mobile -->
+   <div class="drawer-shell">
     <NewEntryDrawer 
     on:close={() => showNew = false} 
     on:dirty={markDirty}
     on:created={handleCreated} 
     />
-  {/if}
+    </div>
+    {/if}
   <!-- EDIT ENTRY -->
   {#if selectedId && selectedRow}
     {#key editVersion}
-      <!-- ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} / -->
+     <div class="drawer-shell">
+
+              <!-- ItemDrawer {selectedId} on:close={() => selectedId = null} {entries} / -->
       <ItemDrawer
         entry={selectedRow}                            
         entryId={selectedId}
@@ -463,184 +526,342 @@ async function refresh() {
         on:save={handleSave}
         />
         <!--entryId={selectedId}-->
+     </div>
   {/key}
-{/if}
-
+ {/if}
+ </main>
 </div>
 
 <style>
 
-.tags-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-  .tags-bar button {
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--border, #2a2a2a);
-    background: var(--chip, #222);
-    color: var(--chip-fg, #ddd);
-    cursor: pointer;
-  }
-  .tags-bar button.selected {
-    background: var(--chip-selected, rgb(151, 155, 153));
-    color: #080707;
-    border-color: var(--chip-selected, #2a6);
-  }
-  .tags-bar button.clear {
-    background: transparent;
-    color: var(--danger-fg, #f88);
-    border-color: var(--danger-fg, #f88);
-  }
 
-  .active-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
-  .active-filters .chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 999px;
-    background: var(--chip, #333);
-    color: var(--chip-fg, #eaeaea);
-    border: 1px solid var(--border, #2a2a2a);
-  }
-  .active-filters .chip .x {
-    border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 14px;
-  }
-
-  .count { margin-left: auto; color: var(--muted, #aaa); }
-
-  .vault {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    /* mobile: use 100dvh if available via utility applied above */
-    height: calc(100vh - 2rem); /* desktop fallback; mobile will use 100dvh */
-    gap: 1rem;
-    padding: 1rem;
-    background: var(--panel);
-    color: var(--text);
-  }
-
-/* --- Mobile: stack list and drawer --- */
-  @media (max-width: 700px) {
-    .vault {
-      grid-template-columns: 1fr;       /* single column */
-      height: auto;                      /* let content size itself */
-      gap: .75rem;
-      padding: .75rem;
-    }
-    .list {
-      /* give the list a reasonable height; drawer follows below */
-      max-height: 42dvh;
-      overflow: auto;
-      border-right: none;                /* no inner divider on mobile */
-      border-bottom: 1px solid var(--field-border);
-      padding-bottom: .5rem;
-    }
-  }
-
-  .sidebar { display:grid; grid-template-rows: auto auto 1fr; gap:.75rem; }
-  .toolbar { display:flex; gap:.5rem; align-items:center; }
-  #mv-search {
-    flex: 1;
-    background: var(--field-bg); color: var(--text);
-    border:1px solid var(--field-border); border-radius:6px; padding:.5rem .6rem;
-  }
-  .new {
-    width: 36px; height: 36px; border-radius:8px; cursor: pointer;
-    border:1px solid var(--field-border); background: var(--field-bg); color: var(--text);
-    font-size: 20px; line-height: 1;
-  }
-  .filter-tags { display:flex; gap:.4rem; flex-wrap:wrap; }
-  .filter-tags .t {
-    padding:.25rem .5rem; border-radius:999px; border:1px solid var(--chip-border);
-    background: var(--chip-bg); color: var(--chip-fg); cursor: pointer; line-height:1;
-  }
-  .filter-tags .t.on { outline:2px solid var(--chip-border); }
-  .filter-tags .clear {
-    padding:.25rem .5rem; border-radius:6px; border:1px solid var(--field-border);
-    background: var(--field-bg); color: var(--text);
-  }
-
-  .list { overflow: auto; border-right: 1px solid var(--field-border); background: var(--panel); padding-right:.25rem; }
-  .row {
-    display: grid; gap: .25rem; padding: .5rem .75rem; width: 100%; text-align: left; color: var(--text);
-    border-radius: 8px;
-  }
-  .row.active { background: var(--list-active-bg); outline: 1px solid var(--chip-border); }
-  .row .name { font-weight: 600; color: var(--text); }
-  .row .sub  { color: var(--muted); font-size: .85rem; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .match {
-    border: 1px solid var(--field-border);
-    background: var(--field-bg);
-    color: var(--text);
-    border-radius: 6px;
-    padding: .4rem .6rem;
-  }
-
-
-/* Base tag pill */
-.filter-tags { display:flex; gap:.4rem; flex-wrap:wrap; }
-
-.filter-tags .t {
-  padding:.28rem .6rem;
-  border-radius:999px;
-  border:1px solid var(--chip-border);
-  background: var(--chip-bg);
-  color: var(--chip-fg);
-  line-height:1;
-  cursor:pointer;
+/* === Layout: two columns (list + detail), scroll-safe === */
+.vault {
+  display: grid;
+  grid-template-columns: 340px 1fr;     /* left list, right detail */
+  gap: 1rem;
+  height: 100dvh;                       /* use dvh if you prefer */
+  padding: 1rem;
+  background: var(--panel);
+  color: var(--text);
+  min-height: 0;                        /* allow children to scroll */
 }
 
-/* Focus ring for keyboard users */
-.filter-tags .t:focus-visible {
-  outline: 2px solid var(--chip-border);
-  outline-offset: 2px;
+/* Left column uses internal grid to place toolbar/tags/list/import */
+.sidebar {
+  display: grid;
+  grid-template-rows:
+    auto   /* mv-toolbar */
+    auto   /* toolbar */
+    auto   /* count */
+    auto   /* tags-bar */
+    1fr    /* ✅ list (scrolls) */
+    auto;  /* import bar */
+  gap: .75rem;
+  min-height: 0;                        /* critical for scroll */
 }
 
-/* Selected (ON) — filled pill + checkmark */
-.filter-tags .t.on {
-  /* Accent color: adjust if you prefer a different hue */
-  --mv-accent: #4f6ef7;
-  background: var(--mv-accent);
-  border-color: var(--mv-accent);
-  color: #fff;
-  font-weight: 600;
+/* ✅ Scrollable list area (keep your existing row visuals) */
+.list {
   position: relative;
+  min-height: 0;
+  overflow: auto;                       /* list scrolls; page doesn't grow */
+  -webkit-overflow-scrolling: touch;
+  border-right: 1px solid var(--field-border);
+  background: var(--panel);
+  padding-right: .25rem;
 }
-
-/* Prepend a subtle ✓ to selected tags */
-.filter-tags .t.on::before {
-  content: '✓';
-  font-size: 12px;
-  margin-right: .4rem;
-  display: inline-block;
-  transform: translateY(-1px); /* optical centering */
+.row {
+  display: grid;
+  gap: .25rem;
+  padding: .5rem .75rem;
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  min-block-size: 44px;
+  transition: background 120ms ease, box-shadow 120ms ease;
 }
-
-/* High Contrast mode (Edge/Windows) — use system colors */
-@media (forced-colors: active) {
-  .filter-tags .t.on {
-    background: Highlight;
-    color: HighlightText;
-    border-color: Highlight;
-  }
-  .filter-tags .t.on::before { content: '✓'; }
+.row:hover { background: color-mix(in oklab, Canvas 92%, Highlight 8%); }
+.row.selected {
+  background: var(--list-active-bg, color-mix(in oklab, Canvas 86%, Highlight 14%));
+  outline: 1px solid var(--chip-border);
+  box-shadow: 0 0 0 2px color-mix(in oklab, #2563eb 24%, Canvas 76%) inset;
 }
+.row .name { font-weight: 600; color: var(--text); }
+.row .sub  { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Match button visuals */
-.match {
+/* ✅ Import bar never overlaps */
+.import-bar {
+  padding-block: .5rem;
+  border-top: 1px solid var(--field-border);
+  background: var(--panel);
+  z-index: 0;
+}
+.import {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem .6rem;
   border: 1px solid var(--field-border);
+  border-radius: 6px;
   background: var(--field-bg);
   color: var(--text);
-  border-radius: 6px;
-  padding: .4rem .6rem;
+}
+.import input[type="file"] { inline-size: 180px; }
+
+/* RIGHT column: inline drawer on desktop, overlay only on mobile */
+.detail {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr;
+}
+.empty {
+  display: grid; place-content: center;
+  color: var(--muted);
+  border-left: 1px solid var(--field-border);
+  background: var(--panel);
+  border-radius: 8px;
 }
 
-  .tags-bar button { margin: 0 6px 6px 0; }
-  .tags-bar button.selected {
-    background: var(--chip-selected, #2a6);
-    color: white;
+/* Host for drawers on desktop */
+.drawer-shell {
+  position: sticky;                     /* stays visible when list scrolls */
+  top: 0;
+  max-height: calc(100dvh - 2rem);      /* account for vault padding */
+  overflow: auto;
+  border-left: 1px solid var(--field-border);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: .75rem;
+}
+
+/* Normalize drawer internals if they carry their own .drawer class */
+:global(.drawer) {
+  position: static;                     /* override any fixed positioning */
+  box-shadow: none;                     /* rely on container visuals */
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+/* === Mobile: stack, and overlay the drawer only on small screens === */
+@media (max-width: 700px) {
+  .vault {
+    grid-template-columns: 1fr;         /* single column */
+    height: auto;
+    gap: .75rem;
+    padding: .75rem;
   }
-  .tags-bar button.clear {
-    background: var(--danger-bg, #333);
-    color: var(--danger-fg, #f88);
+  .detail { display: contents; }        /* don’t reserve right pane space */
+
+  .drawer-shell {
+    position: fixed;                     /* ✅ overlay on mobile only */
+    inset: 0;
+    max-height: none;
+    overflow: auto;
+    border-left: none;
+    border-radius: 0;
+    padding: 0;
+    z-index: 100;                        /* above list */
   }
 
+  .list {
+    max-height: 42dvh;                   /* keep your prior cap */
+    overflow: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--field-border);
+    padding-bottom: .5rem;
+  }
+}
+
+/* If you had a global .drawer z-index earlier, we no longer need to force it high on desktop */
+
+/* === 1) Core layout (ensure list scrolls; import doesn't overlap) === */
+
+/* Allow grid children to create their own scroll areas */
+.vault { min-height: 0; }
+.sidebar { min-height: 0; }
+
+/* Left column stack:
+   mv-toolbar, toolbar, count, tags-bar, LIST(1fr), import-bar */
+.sidebar {
+  display: grid;
+  grid-template-rows: auto auto auto auto 1fr auto;
+  gap: .75rem;
+}
+
+/* Scrollable list area */
+.list {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-right: 1px solid var(--field-border);
+  background: var(--panel);
+  padding-right: .25rem;
+}
+
+/* Import bar stays in flow; never overlaps */
+.import-bar {
+  padding-block: .5rem;
+  border-top: 1px solid var(--field-border);
+  background: var(--panel);
+  z-index: 0;
+}
+
+/* Selected row highlight (kept minimal here) */
+.row.selected {
+  background: var(--list-active-bg, color-mix(in oklab, Canvas 86%, Highlight 14%));
+  outline: 1px solid var(--chip-border);
+}
+
+/* === 2) Desktop/laptop: render drawers inline with an opaque background === */
+
+@media (min-width: 700px) {
+  /* Right column host for drawers. If you already have <main class="detail">, this styles it.
+     If not, these styles still help because we neutralize fixed overlays below. */
+  .detail {
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    display: grid;
+    grid-template-rows: 1fr;
+  }
+
+  /* A wrapper around the drawer (use this if you have one). Gives an OPAQUE background. */
+  .drawer-shell {
+    position: sticky;
+    top: 0;
+    max-height: calc(100dvh - 2rem); /* adjust if your outer padding differs */
+    overflow: auto;
+    background: var(--surface, #131313); /* ✅ opaque background */
+    border-left: 1px solid var(--field-border);
+    border-radius: 8px;
+    padding: .75rem;
+    z-index: 0;
+  }
+
+  /* If your ItemDrawer/NewEntryDrawer components force themselves as modals (fixed/absolute),
+     this section forcibly neutralizes that on DESKTOP so they don't overlay the list.
+     We intentionally keep the drawer's own background transparent so the .drawer-shell provides it.
+     The attribute/class matches cover common patterns. */
+  :global(.drawer),
+  :global(.ItemDrawer),
+  :global(.item-drawer),
+  :global([class*="drawer"]),
+  :global([class*="Drawer"]) {
+    position: static !important;   /* ✅ behave like normal inline content */
+    inset: auto !important;
+    top: auto !important; right: auto !important; bottom: auto !important; left: auto !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    background: transparent !important; /* shell supplies the background */
+    backdrop-filter: none !important;
+    z-index: 0 !important;               /* avoid covering the list */
+  }
+}
+
+/* === 3) Mobile: allow full-screen overlay (good UX on small screens) === */
+@media (max-width: 699px) {
+  /* On phones, it's fine for the drawer to overlay the list.
+     If you wrap with .drawer-shell, make it an overlay with opaque background. */
+  .drawer-shell {
+    position: fixed;
+    inset: 0;
+    max-height: none;
+    overflow: auto;
+    border-left: none;
+    border-radius: 0;
+    padding: 0;
+    background: var(--surface, #131313); /* ✅ opaque background; list won't show through */
+    z-index: 100;
+  }
+}
+
+
+/* ── Compact, space-efficient tag bar ───────────────────────────────────── */
+
+.tags-bar {
+  /* Desktop/tablet: wrap, but cap the height to ~2 rows with a tiny inner scroll */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;                         /* tighter spacing */
+  margin: 6px 0;                        /* smaller vertical margin */
+  padding-right: 2px;                   /* keep text from hiding under scrollbar */
+  max-block-size: 72px;                 /* ≈ two rows; adjust to taste (64–84px) */
+  overflow: auto;                       /* internal scroll if tags overflow */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Mobile: single horizontally scrolling row (saves vertical space) */
+@media (max-width: 700px) {
+  .tags-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    max-block-size: 2.4rem;             /* ≈ one line of compact chips */
+    gap: 4px;                           /* even tighter on small screens */
+  }
+}
+
+/* Base chip (compact) */
+.tags-bar .t {
+  --chip-bg: var(--chip, #222);
+  --chip-fg: var(--chip-fg, #ddd);
+  --chip-border: var(--border, #2a2a2a);
+
+  font: 500 12.5px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 2px 8px;                     /* compact pill */
+  border-radius: 999px;
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Selected state — works via .t.on (Svelte class directive) and aria-pressed */
+.tags-bar .t.on,
+.tags-bar .t[aria-pressed="true"] {
+  --accent: var(--chip-selected, #4f6ef7);
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Optional hover/focus (kept subtle for dense UI) */
+.tags-bar .t:hover { filter: brightness(1.05); }
+.tags-bar .t:focus-visible {
+  outline: 2px solid color-mix(in oklab, #93c5fd 60%, #000 40%);
+  outline-offset: 1px;
+}
+
+/* Clear pill — compact and unobtrusive */
+.tags-bar .clear {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--danger-fg, #f88);
+  background: transparent;
+  color: var(--danger-fg, #f88);
+  font: 500 12.5px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+}
+
+/* High-contrast / Windows forced-colors support */
+@media (forced-colors: active) {
+  .tags-bar .t { forced-color-adjust: none; border-color: ButtonText; color: ButtonText; background: ButtonFace; }
+  .tags-bar .t.on,
+  .tags-bar .t[aria-pressed="true"] { background: Highlight; color: HighlightText; border-color: Highlight; }
+  .tags-bar .clear { color: ButtonText; border-color: ButtonText; }
+}
 
 </style>

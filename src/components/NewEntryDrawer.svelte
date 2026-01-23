@@ -219,7 +219,7 @@
     <div class="drawer" on:click|stopPropagation role="dialog" aria-label="New Entry">
         <div class="drawer-header">
             <h2>New Entry</h2>
-            <button class="close-btn" on:click={close} aria-label="Close">✕</button>
+            <button class="close-btn" on:click={close} aria-label="Close"> X </button>
         </div>
 
         <div class="drawer-content">
@@ -263,7 +263,7 @@
                 </div>
             </div>
 
-            <div class="form-group pwd-opts">
+            <!-- div class="form-group pwd-opts">
                 <label>
                     <input type="checkbox" bind:checked={pwdOpts.upper} />
                     Upper (A-Z)
@@ -288,7 +288,7 @@
                     Length:
                     <input type="number" bind:value={pwdOpts.length} min="4" max="128" />
                 </label>
-            </div>
+            </div -->
 
             
         <section class="field">

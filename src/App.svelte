@@ -116,7 +116,7 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
   }
 
 
-  async function onImportUpload(ev: Event) {
+  export async function onImportUpload(ev: Event) {
     const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
     const pass = prompt('Enter passphrase to import:'); if (!pass) return;
     const text = await file.text();
@@ -297,8 +297,8 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
   {/if}
 </main>
 
-<!-- ADD: Mount the dialog once at root so it overlays everything -->
-<ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} />
+<!-- ADD: Mount the dialog once at root so it overlays everything -- >
+<ChangePassphraseDialog bind:open={showChangePass} on:close={() => (showChangePass = false)} / -->
 
 <Toast />
 

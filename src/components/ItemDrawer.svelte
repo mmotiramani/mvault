@@ -1,4 +1,3 @@
-// ItemDrawer.svelte
 
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
@@ -339,7 +338,8 @@
   {:else}
     <header>
       <h2>Name : {entry.payload.name}</h2>
-      <button class="close" on:click={() => dispatch('close')}>Close</button>
+      <button class="close" 
+        on:click={() => dispatch('close')}> X </button>
       {#if fieldErrors?.name}<div class="error">{fieldErrors.name}</div>{/if}
       <!-- button class="close" on:click={() => dispatch('close')}>Close</button -->
     </header>
@@ -519,6 +519,41 @@
 
 
 <style>
+
+/* ✅ Opaque background so list never shows through */
+  .itemdrawer {
+    background: var(--surface, #111);
+    color: var(--text, #eee);
+  }
+
+  /* ✅ Laptop/desktop: behave INLINE (no overlay) */
+  @media (min-width: 700px) {
+    .itemdrawer {
+      position: static;                /* behave like normal content */
+      inset: auto;
+      z-index: 0;                      /* don't cover the list */
+      box-shadow: none;                /* rely on container's visuals */
+      border-left: 1px solid var(--field-border, #2a2a2a);
+      border-radius: 8px;
+      max-height: calc(100dvh - 2rem); /* adjust for outer padding */
+      overflow: auto;                  /* drawer content scrolls */
+      padding: .75rem;
+    }
+  }
+
+  /* ✅ Mobile: overlay is fine (full-screen) */
+  @media (max-width: 699px) {
+    .itemdrawer {
+      position: fixed;
+      inset: 0;
+      z-index: 100;                    /* above the list on phones */
+      max-height: none;
+      overflow: auto;
+      border: 0;
+      border-radius: 0;
+    }
+  }
+
  :global(.drawer),
   :global(.drawer-content),
   :global(.drawer-body) {
