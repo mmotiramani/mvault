@@ -70,6 +70,7 @@
           aria-pressed={showPass}
           on:click={toggleShow}
           title="Click to reveal"
+          type="button"
         >👁️</button>
     <!-- button
       type="button"
@@ -106,7 +107,7 @@
     <input type="password" bind:value={pass} autocomplete="current-password" aria-describedby="pass-help" />
   </label>
   <small id="pass-help">Your passphrase never leaves this device.</small -->
-  <button disabled={busy || !pass}>Unlock</button>
+  <button disabled={busy || !pass} type="submit">Unlock</button>
   {#if err}<div role="alert">{err}</div>{/if}
 </form>
 
