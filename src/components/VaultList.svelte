@@ -11,7 +11,9 @@
  } from '../lib/data/store';
   import { startAutoLock } from '../lib/app/autolock';
   import ChangePassphraseDialog from '../lib/ui/ChangePassphraseDialog.svelte';
-  import { importFromText, exportToDownload } from '../lib/bridge/vault-file';
+  import { exportEncryptedToDownload, importEncryptedFromText  } from '../lib/bridge/vault-file';
+
+//  import { importFromText, exportToDownload } from '../lib/bridge/vault-file';
 //  import { isDirty } from 'zod/v3';
 
 //make tags availability generic for mobile/desktop and make the unified drawer Item and New
@@ -30,7 +32,15 @@
 
   // local state that controls the dialog visibility
   let showChangePass = false;
+/*
+  // Local UI state
+  let exportPass = '';
+  let showExportPass = false;
 
+  let importPass = '';
+  let showImportPass = false;
+  let importReplace = true; // when true, clears items before import
+*/
 
 // ---- Filtering helpers ----
   const norm = (s: unknown) =>
@@ -358,9 +368,34 @@ function onImportFile(e: Event) {
   async function onExport() {
     // Assuming you already use this elsewhere:
    // await exportToDownload('vault.mvault');   // or with your own filename pattern
+   let exportPass = prompt('Enter passphrase to export:'); if (!exportPass) return;
+    console.log('going to call exportEncryptedToDownload');
+    await exportEncryptedToDownload('vault.mvault', exportPass);
 
-    console.log('goingto call exportToDownload');
-    await exportToDownload('vault.mvault');
+
+if (!$session?.key) {
+      showToast('Unlock your vault before exporting', 'error');
+      return;
+    }
+    if (!exportPass) {
+      showToast('Please enter a file passphrase for export', 'error');
+      return;
+    }
+    try {
+      await exportEncryptedToDownload(undefined, exportPass); // auto filename inside
+      exportPass = '';
+      showToast('Encrypted export created successfully', 'success');
+    } catch (err: any) {
+      const msg = err?.message ?? '';
+      if (/not allowed|denied|permission/i.test(msg)) {
+        showToast('Export was blocked by the browser or permission was denied', 'error');
+      } else if (/incorrect.*passphrase/i.test(msg)) {
+        showToast('Incorrect export passphrase', 'error');
+      } else {
+        showToast('Export failed', 'error');
+      }
+      console.error('[mvault] exportEncryptedToDownload failed:', err);
+    }
 
   }
   function onImport() {

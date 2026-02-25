@@ -4,7 +4,7 @@
   import { showToast } from './lib/ui/toast';
  // import { openFromFileFSA, saveVaultFSA, saveVaultAsFSA, serializeVaultJSON } from './lib/bridge/vault-file';
   
-  import { importFromText, exportToDownload } from './lib/bridge/vault-file';
+ // import { importFromText, exportToDownload } from './lib/bridge/vault-file';
 
   // ... keep your existing imports and logic (Unlock, VaultList, session, autoLock, etc.)
 
@@ -19,6 +19,8 @@
   import Unlock from './components/Unlock.svelte';
   import VaultList from './components/VaultList.svelte';
   import { session } from './lib/app/session';
+  import { importEncryptedFromText  } from './lib/bridge/vault-file';
+
   $: unlocked = !!$session.key;
 
 //passphrase change option
@@ -117,20 +119,63 @@ import ChangePassphraseDialog from './lib/ui/ChangePassphraseDialog.svelte';
 
 
   export async function onImportUpload(ev: Event) {
+ 
+ 
+ /*if (!$session?.key) {
+      showToast('Unlock your vault before importing', 'error');
+      (ev.target as HTMLInputElement).value = '';
+      return;
+    } */
     const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
-    const pass = prompt('Enter passphrase to import:'); if (!pass) return;
-    const text = await file.text();
+    let importPass = prompt('Enter passphrase to import:'); if (!importPass) return;
+    if (!importPass) {
+      showToast('Please enter the file passphrase for import', 'error');
+      (ev.target as HTMLInputElement).value = '';
+      return;
+    }
+    //const text = await file.text();
     // Default MERGE; allow REPLACE if user confirms
-    const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
-    await importFromText(text, pass, replace);
-    (ev.target as HTMLInputElement).value = ''; // reset input
+    //const replace = confirm('Replace current vault with file? Click OK to Replace, Cancel to Merge.');
+    //await importFromText(text, pass, replace);
+    //(ev.target as HTMLInputElement).value = ''; // reset input
+
+    try {
+      const text = await file.text();
+      await importEncryptedFromText(text, importPass, true);
+      (ev.target as HTMLInputElement).value = '';
+      importPass = '';
+      showToast(
+         'Vault replaced from encrypted file',
+        'success'
+      );
+/*      showToast(
+        importReplace ? 'Vault replaced from encrypted file' : 'Vault merged from encrypted file',
+        'success'
+      );*/
+
+    } catch (err: any) {
+      const msg = err?.message ?? '';
+      if (/operationerror|incorrect.*passphrase|decryption.*failed/i.test(msg)) {
+        showToast('Incorrect file passphrase or the file is corrupted', 'error');
+      } else if (/invalid package|missing (iv|cipher|kdf\.salt)|unsupported/i.test(msg)) {
+        showToast('Not a valid mvault encrypted file', 'error');
+      } else {
+        showToast('Import failed', 'error');
+      }
+      console.error('[mvault] importEncryptedFromText failed:', err);
+      (ev.target as HTMLInputElement).value = '';
+    }
+
+
   }
 
 
+  /*
   async function onExportClick() {
     console.log('goingto call exportToDownload');
     await exportToDownload('vault.mvault');
   }
+    */
 
 /*
   async function save() {
