@@ -20,6 +20,7 @@
   import VaultList from './components/VaultList.svelte';
   import { session } from './lib/app/session';
   import { importEncryptedFromText  } from './lib/bridge/vault-file';
+  
 
   $: unlocked = !!$session.key;
 
