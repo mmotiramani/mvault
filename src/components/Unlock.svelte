@@ -18,14 +18,15 @@
 
 
 
-  import { biometricUnlockWithLargeBlob } from '../lib/app/session';
+  import { biometricUnlockWithLargeBlob, biometricUnlockWithPRF } from '../lib/app/session';
   let unlocking = false;
   let bioMsg = '';
 
   async function onBiometricUnlock() {
     unlocking = true; bioMsg = '';
     try {
-      const r = await biometricUnlockWithLargeBlob();  // OS sheet + read + unlock(pass)
+      //const r = await biometricUnlockWithLargeBlob();  // OS sheet + read + unlock(pass)
+      const r = await biometricUnlockWithPRF();
       bioMsg = r.message;
       // If r.ok, your usual “unlocked” path continues automatically
     } catch (e) {

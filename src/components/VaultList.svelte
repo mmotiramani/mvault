@@ -626,8 +626,8 @@ if (!$session?.key) {
               {enablingPref ? 'Saving…' : 'Enable biometric unlock (preferred)'}
             </button>
           </div>
-        {/if}
-
+       {/if} 
+       {#if canPRF}
           <!-- Try PRF-preferred unlock -->
           <div>
             <button type="button" disabled={unlockingPref} on:click={async () => {
@@ -646,7 +646,7 @@ if (!$session?.key) {
           </div>
 
           {#if prefMsg}<div role="status">{prefMsg}</div>{/if}
-
+       {/if}
       {/if}
 
     </div>
@@ -761,7 +761,7 @@ if (!$session?.key) {
     on:created={handleCreated} 
     />
     </div>
-    {/if}
+  {/if}
   <!-- EDIT ENTRY -->
   {#if selectedId && selectedRow}
     {#key editVersion}
