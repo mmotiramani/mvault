@@ -108,7 +108,7 @@
 
 
 // SAFE hint at mount — NO OS prompt, NO blur, NO lock
-  supportsPrfStatic().then(v => { canPRF = v; });
+  //supportsPrfStatic().then(v => { canPRF = v; });
 
   async function onCheckCapsClick() {
     checking = true; capMsg = '';
@@ -116,7 +116,9 @@
       const res = await detectCapabilitiesInteractive(); // OS sheet (user gesture), uiGuard prevents lock
       canPRF = res.prf;
       canLargeBlob = res.largeBlob;
+      console.debug('[mvault] Capabilities detected PRF or largeBlob:', canPRF, canLargeBlob);
       if (res.message) capMsg = res.message;
+      capMsg = `Biometric capabilities: ${canPRF ? 'PRF ' : 'noPRF'}${canLargeBlob ? 'LargeBlob' : 'noBLOB'}` || 'No biometric capabilities detected.';
     } catch (e) {
       console.error(e);
       capMsg = 'Capability check failed.';
@@ -538,20 +540,12 @@ if (!$session?.key) {
           {#if capMsg}<div role="status">{capMsg}</div>{/if}
         </div>
 
-        <hr />
-       <div>
-          <button type="button" on:click={onBiometricGate}>
-              Verify with Face ID / Touch ID / Windows Hello
-            </button>
-            {#if gateMsg}<div role="status">{gateMsg}</div>{/if}
-          </div>
-
         <div>
           <button type="button" on:click={onEnableBiometrics} disabled={enrolling}>
             {enrolling ? 'Enrolling…' : 'Enable biometrics on this device'}
           </button>
           {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
-          </div>
+        </div>
         
 
       {#if canLargeBlob}
