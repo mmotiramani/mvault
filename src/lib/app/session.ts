@@ -51,44 +51,65 @@ export async function detectBiometricPreferred(): Promise<{ uvCapable: boolean; 
 
 export async function enrollBiometricPreferred(): Promise<{ enrolled: boolean; mode: BioMode; message?: string; }> {
   try {
-    const host = window.location.hostname; // "localhost" in dev, "mmotiramani.github.io" in prod  [1](https://msftnewsnow.com/microsoft-authenticator-ends-password-support-edge/)
-    const rp = { name: 'mvault', id: host };
+      
+const host = window.location.hostname;            // 'localhost' in dev, 'mmotiramani.github.io' in prod
+const rp = { name: 'mvault', id: host };
 
-    const { uvCapable, prfLikely } = await detectBiometricPreferred();
-    if (!uvCapable) return { enrolled: false, mode: 'unknown' as const, message: 'No platform authenticator with biometrics/PIN detected.' };
+const { uvCapable } = await detectBiometricPreferred();
+if (!uvCapable) {
+  return { enrolled: false, mode: 'unknown', message: 'No platform authenticator with biometrics/PIN detected.' };
+}
 
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const userId   = crypto.getRandomValues(new Uint8Array(16));
+const challenge = crypto.getRandomValues(new Uint8Array(32));
+const userId   = crypto.getRandomValues(new Uint8Array(16));
 
-    const result = await withLockSuspended('webauthn-enrollment', async () => {
-      const cred = await navigator.credentials.create({
-        publicKey: {
-          challenge,
-          rp,
-          user: { id: userId, name: 'mvault-user', displayName: 'mvault-user' },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256
-          authenticatorSelection: {
-            authenticatorAttachment: 'platform',
-            userVerification: 'required',  // OS sheet (Face ID / Touch ID / Windows Hello / Android biometrics)  [5](https://mulimani.github.io/)
-            residentKey: 'preferred'
-          },
-          timeout: 30_000
-        }
-      } as CredentialCreationOptions);
+const cred = await withLockSuspended('webauthn-enrollment', async () => {
+  return await navigator.credentials.create({
+    publicKey: {
+      challenge,
+      rp,
+      user: { id: userId, name: 'mvault-user', displayName: 'mvault-user' },
+      // IMPORTANT: include both algorithms for compatibility (Windows Hello needs RS256)
+      pubKeyCredParams: [
+        { type: 'public-key', alg: -7   },  // ES256
+        { type: 'public-key', alg: -257 }   // RS256
+      ],                                     // [3](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/index.html)
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform',
+        userVerification: 'required',
+        residentKey: 'preferred'
+      },
+      timeout: 30_000,
+      // IMPORTANT: request PRF so the credential can support prf-eval later
+      extensions: { prf: {} }                // [1](https://github.com/w3c/webauthn/issues/1691)
+    }
+  } as CredentialCreationOptions) as PublicKeyCredential | null;
+});
 
-      const pc = cred as PublicKeyCredential | null;
-      if (!pc) return { enrolled: false, mode: 'unknown' as const, message: 'Registration cancelled.' };
+if (!cred) return { enrolled: false, mode: 'unknown', message: 'Registration cancelled.' };
 
-      const credentialId = b64UrlFromU8(new Uint8Array(pc.rawId));
+// Check client-side extension output
+const prfOut  = (cred as any).getClientExtensionResults?.()?.prf;  // {enabled?: boolean} if supported  [2](https://mojoauth.com/ciam-qna/webauthn-browser-cross-platform-challenges)
+const prfEnabled = prfOut?.enabled === true;
 
-      // compute the union-typed mode once and reuse it
-      const mode: BioMode = prfLikely ? 'prf' : 'sig';
+const credentialId = b64UrlFromU8(new Uint8Array(cred.rawId));
 
-      await saveBioEnrollment({ credentialId, mode, createdAt: Date.now() });
-      return { enrolled: true, mode, message: 'Biometric enrollment stored on this device.' };
-    });
+// Save device-local enrollment. `storage` stays 'none' until user enables a passwordless mode.
+await saveBioEnrollment({
+  credentialId,
+  mode: prfEnabled ? 'prf' : 'sig',
+  storage: 'none',
+  createdAt: Date.now()
+});
 
-    return result;
+return {
+  enrolled: true,
+  mode: prfEnabled ? 'prf' : 'sig',
+  message: prfEnabled
+    ? 'Biometric enrollment stored. PRF is enabled for this credential.'
+    : 'Biometric enrollment stored. PRF not enabled by this authenticator; fallback is available.'
+};
+
   } catch (e: any) {
     console.error('[mvault] enrollBiometricPreferred error:', e);
     return { enrolled: false, mode: 'unknown' as const, message: e?.message || 'Enrollment failed.' };
@@ -204,6 +225,192 @@ export async function biometricUnlockWithLargeBlob(): Promise<{ ok: boolean; mes
     return { ok: false, message: e?.message ?? 'Biometric unlock failed.' };
   }
 }
+
+
+// Base64URL helpers (you already had b64UrlFromU8; adding decode too)
+function u8FromB64url(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+  const bin = atob(b64 + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function b64url(u8: Uint8Array): string {
+  const s = btoa(String.fromCharCode(...u8));
+  return s.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+/** Best-effort PRF feature detection (Chromium). */
+export async function supportsPrf(): Promise<boolean> {
+  if (!('PublicKeyCredential' in window)) return false;
+  // If the new capabilities API exists, prefer it.
+  const anyPKC = PublicKeyCredential as any;
+  if (typeof anyPKC.getClientCapabilities === 'function') {
+    try {
+      const caps = await anyPKC.getClientCapabilities();
+      // Many Chromium builds expose `prf: true` here when extension is supported. [4](https://dev.to/codeparrot/svelte-for-beginners-easy-guide-3fam)
+      if (caps && caps.prf === true) return true;
+    } catch {/* ignore */}
+  }
+  // Fallback: we can attempt a guarded "no-op" eval later; for now just return false and let enable() try.
+  return false;
+}
+
+/**
+ * Derive a stable 32-byte secret via PRF for this credential + salt.
+ * Requires UV=required and allowCredentials with the local credentialId.
+ */
+
+
+/** Derive PRF secret or return `null` if unsupported/unavailable. */
+async function prfDeriveSecretOrNull(credentialIdB64: string, salt: Uint8Array): Promise<Uint8Array | null> {
+  const rpId = window.location.hostname;                 // 'localhost' in dev, 'mmotiramani.github.io' in prod
+  const rawId = u8FromB64url(credentialIdB64);
+
+  const cred = await withLockSuspended('webauthn-prf-eval', async () => {
+    return await navigator.credentials.get({
+      publicKey: {
+        rpId,
+        userVerification: 'required',
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        allowCredentials: [{ type: 'public-key', id: rawId }],
+        extensions: { prf: { eval: { first: salt } } as any }      // pass Uint8Array, not .buffer  [1](https://github.com/w3c/webauthn/issues/1691)
+      },
+      mediation: 'optional'
+    } as CredentialRequestOptions) as PublicKeyCredential | null;
+  });
+
+  if (!cred) return null;
+
+  const ext = (cred as any).getClientExtensionResults?.();         // [2](https://mojoauth.com/ciam-qna/webauthn-browser-cross-platform-challenges)
+  const buf: ArrayBuffer | undefined = ext?.prf?.results?.first;
+  if (!buf || buf.byteLength !== 32) return null;
+
+  return new Uint8Array(buf);
+}
+
+async function prfDeriveSecret(credentialIdB64url: string, salt: Uint8Array): Promise<Uint8Array> {
+  const rpId = window.location.hostname; // 'localhost' in dev, 'mmotiramani.github.io' in prod
+  const rawId: Uint8Array = u8FromB64url(credentialIdB64url);
+
+  const cred = await withLockSuspended('webauthn-prf-eval', async () => {
+    return await navigator.credentials.get({
+      publicKey: {
+        rpId,
+        userVerification: 'required',
+        challenge: crypto.getRandomValues(new Uint8Array(32)),           // Uint8Array OK
+        allowCredentials: [{ type: 'public-key', id: rawId }],           // Uint8Array OK
+        // PRF extension input: pass Uint8Array (NOT .buffer) to avoid ArrayBufferLike
+        extensions: { prf: { eval: { first: salt } } as any }
+      },
+      mediation: 'optional'
+    } as CredentialRequestOptions) as PublicKeyCredential | null;
+  });
+
+  if (!cred) throw new Error('PRF get() returned null');
+
+  const ext = (cred as any).getClientExtensionResults?.();
+  // Chromium returns: { prf: { results: { first: ArrayBuffer } } }
+  const buf: ArrayBuffer | undefined = ext?.prf?.results?.first;
+  if (!buf || buf.byteLength !== 32) throw new Error('PRF result missing or wrong length');
+
+  return new Uint8Array(buf); // Uint8Array as our canonical BufferSource
+}
+
+
+/** Enable PRF-preferred passwordless by sealing the passphrase under a PRF-derived KEK. */
+
+/** Seal the passphrase under a PRF‑derived KEK and save it in the device-local bio record. */
+
+
+export async function enablePasswordlessWithPRF(passphrase: string): Promise<{ ok: boolean; message: string; }> {
+  try {
+    const bio = await loadBioEnrollment();
+    if (!bio?.credentialId) return { ok: false, message: 'No local biometric enrollment found on this device.' };
+
+    // await supportsPrf(); // hint only
+    // Preflight: try a PRF eval on a throwaway salt before sealing.
+    const probe = await prfDeriveSecretOrNull(bio.credentialId, crypto.getRandomValues(new Uint8Array(32)));
+    if (!probe) {
+      return { ok: false, message: 'This authenticator/browser does not return PRF output for this credential.' };
+    }
+
+    // Now derive with the actual persisted salt, and seal passphrase.
+    const salt = crypto.getRandomValues(new Uint8Array(32));                 // Uint8Array
+      const secret = await prfDeriveSecretOrNull(bio.credentialId, salt);
+    if (!secret) return { ok: false, message: 'PRF not available for this credential.' };
+
+    // PRF secret → AES‑GCM KEK (pass Uint8Array, not .buffer)
+    const kek = await crypto.subtle.importKey(
+      'raw',
+      secret.buffer as ArrayBuffer,                                          // <-- Cast to ArrayBuffer
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    const iv  = crypto.getRandomValues(new Uint8Array(12));                  // Uint8Array
+    const pt  = new TextEncoder().encode(passphrase);                        // Uint8Array
+    const ct  = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },                                               // <-- iv: Uint8Array
+      kek,
+      pt                                                                      // <-- data: Uint8Array
+    );
+
+  await saveBioEnrollment({
+    ...bio,
+      storage: 'prf' as const,
+      prf: {
+        v: 1 as const,
+        alg: 'AES-GCM' as const,
+        saltB64: b64UrlFromU8(salt),
+        ivB64:   b64UrlFromU8(iv),
+        ctB64:   b64UrlFromU8(new Uint8Array(ct))                            // serialize as Base64URL
+      },
+      lastUsedAt: Date.now()
+    });
+
+    //await saveBioEnrollment(updated);
+    return { ok: true, message: 'Biometric passwordless (preferred) enabled on this device.' };
+  } catch (e: any) {
+    console.error('[mvault] PRF enable failed:', e);
+    return { ok: false, message: e?.message ?? 'PRF not supported on this browser/authenticator.' };
+  }
+}
+
+
+/** Biometric-only unlock using PRF-preferred path. */
+
+export async function biometricUnlockWithPRF(): Promise<{ ok: boolean; message: string; }> {
+  try {
+    const bio = await loadBioEnrollment();
+    if (!bio?.credentialId) return { ok: false, message: 'No local biometric enrollment found.' };
+    if (bio.storage !== 'prf' || !bio.prf) return { ok: false, message: 'PRF-based unlock is not enabled on this device.' };
+
+    const salt = u8FromB64url(bio.prf.saltB64);
+    const secret = await prfDeriveSecretOrNull(bio.credentialId, salt);
+    if (!secret) return { ok: false, message: 'PRF not available for this credential.' };
+    const kek = await crypto.subtle.importKey('raw', secret.buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
+    const iv = u8FromB64url(bio.prf.ivB64);
+    const ct = u8FromB64url(bio.prf.ctB64);
+
+    const ptBuf = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+      kek,
+      ct.buffer as ArrayBuffer
+    );
+    const pass = new TextDecoder().decode(new Uint8Array(ptBuf));
+
+    await unlock(pass);  // reuse your existing unlock(passphrase)
+    return { ok: true, message: 'Unlocked with biometrics (preferred).' };
+  } catch (e: any) {
+    console.error('[mvault] PRF unlock failed:', e);
+    return { ok: false, message: e?.message ?? 'Biometric unlock (preferred) failed.' };
+  }
+}
+
 
 
 export async function changePassphrase(newPass: string, currentPass?: string): Promise<void> {

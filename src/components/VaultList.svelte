@@ -21,7 +21,14 @@
   import { refreshTags, session } from '../lib/app/session';
   import onImportUpload from '../App.svelte';
 
-  import { enrollBiometricPreferred, enablePasswordlessWithLargeBlob, biometricUnlockWithLargeBlob } from '../lib/app/session';
+  import { 
+    enrollBiometricPreferred
+    , enablePasswordlessWithLargeBlob
+    , biometricUnlockWithLargeBlob
+    , enablePasswordlessWithPRF
+    , biometricUnlockWithPRF
+    , supportsPrf
+  } from '../lib/app/session';
   import { withLockSuspended } from '../lib/app/uiGuard'; 
 
   const uiDirty = writable(false);
@@ -40,6 +47,16 @@
   let enabling = false;
   let unlocking = false;
   let pwMsg = '';
+
+// Optional: PRF-based passwordless fallback (requires an extra stored blob and a confirmation input)
+  let pwPref = '';
+  let enablingPref = false;
+  let unlockingPref = false;
+  let prefMsg = '';
+  let prfCap = false;
+
+  // Optional: check PRF once to show/hide these buttons
+  supportsPrf().then(v => prfCap = v);
 
 /*
   // Local UI state
@@ -509,6 +526,50 @@ if (!$session?.key) {
               {unlocking ? 'Unlocking…' : 'Unlock with biometrics'}
             </button>
           </div>
+
+
+        <!-- PRF-preferred: one-time sealing of passphrase under PRF KEK -->
+          <div>
+            <input
+              type="password"
+              placeholder="Confirm passphrase (once)"
+              bind:value={pwPref}
+              autocomplete="current-password"
+              aria-label="Confirm passphrase for PRF" />
+            <button type="button" disabled={enablingPref || !pwPref} on:click={async () => {
+              enablingPref = true; prefMsg = '';
+              try {
+                const r = await enablePasswordlessWithPRF(pwPref);
+                prefMsg = r.message;
+                if (r.ok) pwPref = '';
+              } catch (e) {
+                console.error(e); prefMsg = 'Failed to enable PRF-based unlock.';
+              } finally {
+                enablingPref = false;
+              }
+            }}>
+              {enablingPref ? 'Saving…' : 'Enable biometric unlock (preferred)'}
+            </button>
+          </div>
+
+          <!-- Try PRF-preferred unlock -->
+          <div>
+            <button type="button" disabled={unlockingPref} on:click={async () => {
+              unlockingPref = true; prefMsg = '';
+              try {
+                const r = await biometricUnlockWithPRF();
+                prefMsg = r.message;
+              } catch (e) {
+                console.error(e); prefMsg = 'Biometric unlock (preferred) failed.';
+              } finally {
+                unlockingPref = false;
+              }
+            }}>
+              {unlockingPref ? 'Unlocking…' : 'Unlock with biometrics (preferred)'}
+            </button>
+          </div>
+
+          {#if prefMsg}<div role="status">{prefMsg}</div>{/if}
 
       {/if}
 

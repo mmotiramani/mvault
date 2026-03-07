@@ -10,10 +10,18 @@ export type BioEnrollment = {
   createdAt: number;
   lastUsedAt?: number;
 
-
   // NEW: how passwordless data is stored (fallback uses largeBlob)
-  storage?: 'largeBlob' | 'none';
+  storage?: 'prf' | 'largeBlob' | 'none';
 
+
+  // NEW: when storage === 'prf', we store a small sealed blob under a PRF‑derived KEK:
+  prf?: {
+    v: 1;                    // schema version
+    alg: 'AES-GCM';
+    saltB64: string;         // PRF salt (Base64URL)
+    ivB64: string;           // AES-GCM IV (Base64URL)
+    ctB64: string;           // ciphertext (Base64URL)
+  };
 };
 
 export async function saveBioEnrollment(rec: BioEnrollment): Promise<void> {
