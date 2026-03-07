@@ -91,7 +91,7 @@
 <!-- Passphrase field with show/hide eye -->
 
 <div class="field passphrase">
-  <label for="mv-pass">Passphrase</label>
+  <label for="mv-pass">Passphrase 1</label>
 
   <!-- Segmented input: input + trailing eye button -->
   <div class="input-group">
