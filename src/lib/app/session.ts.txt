@@ -1,6 +1,6 @@
 
 // src/lib/app/session.ts
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import type { VaultHeader, VaultItemPayload, VaultItem } from '../data/types';
 import { getOrCreateHeader, deriveFromHeader, ensureCanary, saveHeader } from '../crypto/header';
 import { listItems, txAll } from '../data/store';
@@ -15,13 +15,105 @@ import { showToast } from '../ui/toast';
 import { openDBWithSchema, ITEMS_STORE } from '../data/db';
 import { decryptJSON } from '../crypto/crypto';
 
+// --- Biometric enrollment (scaffolding only) ---
+import { saveBioEnrollment, hasLocalBioEnrollment } from './bio';
+import { withLockSuspended } from './uiGuard';
+
+function b64UrlFromU8(u8: Uint8Array): string {
+  const s = btoa(String.fromCharCode(...u8));
+  // normalize to URL-safe if you prefer; not strictly required for our use
+  return s.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+/** Detect if a platform authenticator with UV is present (and a rough PRF hint for later steps). */
+export async function detectBiometricPreferred(): Promise<{ uvCapable: boolean; prfLikely: boolean; }> {
+  if (!('PublicKeyCredential' in window)) return { uvCapable: false, prfLikely: false };
+  const uvCapable = await (window as any).PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? false;
+  // We’ll refine PRF detection in Step 2; for now, this is just a hint.
+  const prfLikely = !!(PublicKeyCredential as any).getClientCapabilities;
+  return { uvCapable, prfLikely };
+}
+
+/**
+ * Enroll a platform credential with UV=required (no decryption yet).
+ * Stores only device-local metadata (credentialId + mode hint) in IndexedDB.
+ * Must be called from a user gesture (button click) so Safari allows the OS sheet.
+ */
+export async function enrollBiometricPreferred(): Promise<{ enrolled: boolean; mode: 'prf' | 'sig' | 'unknown'; message?: string; }> {
+  try {
+    
+    const host = window.location.hostname;         // "localhost" during dev, "mmotiramani.github.io" in prod
+    const rp = { name: 'mvault', id: host };       // <- use the current host as rp.id
+
+    const { uvCapable, prfLikely } = await detectBiometricPreferred();
+    if (!uvCapable) return { enrolled: false, mode: 'unknown', message: 'No platform authenticator with biometrics/PIN detected.' };
+
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const userId   = crypto.getRandomValues(new Uint8Array(16));
+    
+     
+    
+    const result = await withLockSuspended('webauthn-enrollment', async () => 
+      {
+
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: rp,                                    // { id: "localhost", name: "mvault" } in dev
+          user: { id: userId, name: 'mvault-user', displayName: 'mvault-user' },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            userVerification: 'required',
+            residentKey: 'preferred'
+          },
+          timeout: 30_000
+        }
+      } as CredentialCreationOptions);
+
+  /*    const credA = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'mvault', id: 'mmotiramani.github.io' }, // rpId = host only
+          user: { id: userId, name: 'mvault-user', displayName: 'mvault-user' },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+          timeout: 30_000
+        }
+      } as CredentialCreationOptions);
+  */
+      const pc = cred as PublicKeyCredential | null;
+      if (!pc) return { enrolled: false, mode: 'unknown', message: 'Registration failed or was cancelled.' };
+
+      const credentialId = b64UrlFromU8(new Uint8Array(pc.rawId));
+      await saveBioEnrollment({ credentialId, mode: prfLikely ? 'prf' : 'sig', createdAt: Date.now() });
+
+      return { enrolled: true, mode: prfLikely ? 'prf' : 'sig', message: 'Biometric enrollment stored on this device.' };
+    });
+    return result;
+  } catch (e: any) {
+      console.error('[mvault] enrollBiometricPreferred error:', e);
+      return { enrolled: false, mode: 'unknown', message: e?.message || 'Enrollment failed.' };
+    }
+}
+
+/** Convenience: return true if this device has a local biometric enrollment. */
+export async function deviceHasBiometricEnrollment(): Promise<boolean> {
+  return hasLocalBioEnrollment();
+}
 
 export async function changePassphrase(newPass: string, currentPass?: string): Promise<void> {
   // Snapshot current state
-  let sVal: SessionState | null = null;
-  session.update(s => (sVal = s, s));
 
+    // BEFORE
+    // let sVal: SessionState | null = null;
+    // session.update(s => (sVal = s, s));
+    // const isLocked = !sVal?.key;
+
+    // AFTER
+  const sVal = get(session);
   const isLocked = !sVal?.key;
+
   try {
     // Kick progress UI into gear (phase will be updated by rekeyVault)
     startRekey('decrypt', 0, 'Preparing…');
@@ -119,13 +211,6 @@ const db = await openDBWithSchema();
     }
   }
   return Array.from(tagSet).sort();
-
- /*
-  const entries = await listItems<VaultItemPayload>(key);
-  const tagSet = new Set<string>();
-  for (const e of entries) for (const t of e.payload.tags || []) tagSet.add(t.toLowerCase());
-  return Array.from(tagSet).sort();
-  */
 }
 
 export async function refreshTags() {

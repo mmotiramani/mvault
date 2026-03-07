@@ -1,7 +1,12 @@
 
 <script lang="ts">
-  import { initHeader, unlock } from '../lib/app/session';
+  import { initHeader, unlock, enrollBiometricPreferred } from '../lib/app/session';
   import { onMount } from 'svelte';
+  import { session } from '../lib/app/session';  // store to know when we're unlocked
+ 
+
+ 
+
   let pass = '';
   let passEl: HTMLInputElement | null = null; // <-- ref to the input
   let busy = false;
@@ -10,6 +15,23 @@
 
   let passInput: HTMLInputElement | null = null;
 
+
+ /* let enrolling = false;
+  let bioMsg = '';
+
+  async function onEnableBiometrics() {
+    enrolling = true; bioMsg = '';
+    try {
+      const res = await enrollBiometricPreferred(); // must be a click (user gesture)
+      bioMsg = res.message ?? (res.enrolled ? 'Biometrics enabled on this device.' : 'Unable to enable biometrics.');
+    } catch (e) {
+      console.error(e);
+      bioMsg = 'Enrollment failed.';
+    } finally {
+      enrolling = false;
+    }
+  }
+*/
   function toggleShow() {
     showPass = !showPass;
     // keep typing flow nice: refocus the input without scrolling
@@ -109,6 +131,16 @@
   <small id="pass-help">Your passphrase never leaves this device.</small -->
   <button disabled={busy || !pass} type="submit">Unlock</button>
   {#if err}<div role="alert">{err}</div>{/if}
+
+
+<!-- {#if $session.key} 
+  <hr />
+  <button type="button" on:click={onEnableBiometrics} disabled={enrolling}>
+    {enrolling ? 'Enrolling…' : 'Enable biometrics on this device'}
+  </button>
+  {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
+  {/if} -->
+
 </form>
 
 

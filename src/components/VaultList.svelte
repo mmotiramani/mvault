@@ -21,6 +21,9 @@
   import { refreshTags, session } from '../lib/app/session';
   import onImportUpload from '../App.svelte';
 
+  import { enrollBiometricPreferred, enablePasswordlessWithLargeBlob, biometricUnlockWithLargeBlob } from '../lib/app/session';
+  import { withLockSuspended } from '../lib/app/uiGuard'; 
+
   const uiDirty = writable(false);
   const markDirty = () => uiDirty.set(true);
   const resetDirty = () => uiDirty.set(false);
@@ -32,6 +35,12 @@
 
   // local state that controls the dialog visibility
   let showChangePass = false;
+
+  let pw = '';           // a small input to confirm the passphrase once
+  let enabling = false;
+  let unlocking = false;
+  let pwMsg = '';
+
 /*
   // Local UI state
   let exportPass = '';
@@ -51,6 +60,23 @@
   // UI state
   let q = '';                       // search query
   let selectedTags: string[] = [];  // filter by tags
+
+
+  let enrolling = false;
+  let bioMsg = '';
+
+  async function onEnableBiometrics() {
+    enrolling = true; bioMsg = '';
+    try {
+      const res = await enrollBiometricPreferred(); // must be a click (user gesture)
+      bioMsg = res.message ?? (res.enrolled ? 'Biometrics enabled on this device.' : 'Unable to enable biometrics.');
+    } catch (e) {
+      console.error(e);
+      bioMsg = 'Enrollment failed.';
+    } finally {
+      enrolling = false;
+    }
+  }
 
   function toggleTag(t: string) {
     t = t.toLowerCase();
@@ -434,6 +460,58 @@ if (!$session?.key) {
 
       <!-- button class="btn ghost"   on:click={onImport}>Import</button -->
       <button class="btn ghost"   on:click={onExport}>Export</button>
+    
+      {#if $session.key}
+        <hr />
+        <button type="button" on:click={onEnableBiometrics} disabled={enrolling}>
+          {enrolling ? 'Enrolling…' : 'Enable biometrics on this device'}
+        </button>
+        {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
+
+        <!-- One-time binding: store passphrase into largeBlob -->
+          <div>
+            <input
+              type="password"
+              placeholder="Confirm passphrase (once)"
+              bind:value={pw}
+              autocomplete="current-password"
+              aria-label="Confirm passphrase" />
+            <button type="button" disabled={enabling || !pw} on:click={async () => {
+              enabling = true; pwMsg = '';
+              try {
+                const r = await enablePasswordlessWithLargeBlob(pw);
+                pwMsg = r.message;
+                if (r.ok) pw = '';
+              } catch (e) {
+                console.error(e); pwMsg = 'Failed to enable passwordless fallback.';
+              } finally {
+                enabling = false;
+              }
+            }}>
+              {enabling ? 'Saving…' : 'Enable biometric unlock (fallback)'}
+            </button>
+            {#if pwMsg}<div role="status">{pwMsg}</div>{/if}
+          </div>
+
+          <!-- Try biometric-only unlock (for testing immediately) -->
+          <div>
+            <button type="button" disabled={unlocking} on:click={async () => {
+              unlocking = true; pwMsg = '';
+              try {
+                const r = await biometricUnlockWithLargeBlob();
+                pwMsg = r.message;
+              } catch (e) {
+                console.error(e); pwMsg = 'Biometric unlock failed.';
+              } finally {
+                unlocking = false;
+              }
+            }}>
+              {unlocking ? 'Unlocking…' : 'Unlock with biometrics'}
+            </button>
+          </div>
+
+      {/if}
+
     </div>
 
     <div class="toolbar">

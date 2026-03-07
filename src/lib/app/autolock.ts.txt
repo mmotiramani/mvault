@@ -3,6 +3,14 @@
 import { session } from './session';
 import { get } from 'svelte/store';
 
+import { lockIsSuspended,uiGuard } from './uiGuard';
+// ...
+function maybeLockOnBlurOrHide() {
+  if (lockIsSuspended()) return;           // <-- ignore while WebAuthn is running
+  // lock(); // your existing lock call
+}
+
+
 let timeout: number | null = null;
 
 export function startAutoLock(minutes = 10) {
@@ -16,7 +24,13 @@ export function startAutoLock(minutes = 10) {
   schedule();
   window.addEventListener('mousemove', reset);
   window.addEventListener('keydown', reset);
-  window.addEventListener('blur', lockNow);
+  console.log('[mvault] Auto-lock on blur is suspended due to ongoing operation:', get(uiGuard).reason);
+  if (!lockIsSuspended())            // <-- ignore while WebAuthn is running
+    window.addEventListener('blur', lockNow);
+  else
+    window.removeEventListener('blur', lockNow);
+
+
 
   return () => {
     if (timeout) window.clearTimeout(timeout);
