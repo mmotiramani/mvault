@@ -412,6 +412,139 @@ export async function biometricUnlockWithPRF(): Promise<{ ok: boolean; message: 
 }
 
 
+export async function probePrfForThisCredential(): Promise<boolean> {
+  const bio = await loadBioEnrollment();
+  if (!bio?.credentialId) return false;
+  // try a PRF eval on a dummy salt; return true only on 32-byte output
+  const out = await prfDeriveSecretOrNull(bio.credentialId, crypto.getRandomValues(new Uint8Array(32)));
+  return !!out;
+}
+
+export async function supportsLargeBlobForThisCredential(): Promise<boolean> {
+  const bio = await loadBioEnrollment();
+  if (!bio?.credentialId) return false;
+
+  try {
+    const rpId = window.location.hostname;
+    const rawId = u8FromB64url(bio.credentialId);
+    const cred = await navigator.credentials.get({
+      publicKey: {
+        rpId,
+        userVerification: 'required',
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        allowCredentials: [{ type: 'public-key', id: rawId }],
+        extensions: { largeBlob: { read: true } as any }
+      },
+      mediation: 'optional'
+    } as CredentialRequestOptions) as PublicKeyCredential | null;
+
+    const out = (cred as any)?.getClientExtensionResults?.()?.largeBlob;
+    return !!out && ('supported' in out ? out.supported === true : 'blob' in out);
+  } catch {
+    return false;
+  }
+}
+
+
+// Add near your other biometric helpers.
+export async function biometricGate(): Promise<{ ok: boolean; message: string; }> {
+  try {
+    const bio = await loadBioEnrollment();
+    if (!bio?.credentialId) return { ok: false, message: 'No local biometric enrollment found on this device.' };
+
+    const rpId  = window.location.hostname;
+    const rawId = u8FromB64url(bio.credentialId);
+
+    const cred = await withLockSuspended('webauthn-uv-gate', async () => {
+      return await navigator.credentials.get({
+        publicKey: {
+          rpId,
+          userVerification: 'required',                         // OS sheet — Face ID / Touch ID / Windows Hello
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          allowCredentials: [{ type: 'public-key', id: rawId }]
+        },
+        mediation: 'optional'
+      } as CredentialRequestOptions) as PublicKeyCredential | null;
+    });
+
+    if (!cred) return { ok: false, message: 'Verification cancelled.' };
+    return { ok: true, message: 'Verified.' };
+  } catch (e: any) {
+    console.error('[mvault] biometricGate error:', e);
+    return { ok: false, message: e?.message ?? 'Verification failed.' };
+  }
+}
+
+// ----------------------------------------------
+// Safe / interactive capability probes for UI
+// ----------------------------------------------
+
+/**
+ * Safe, no‑prompt hint: returns true if the browser reports PRF support
+ * (Chromium exposes getClientCapabilities). This does NOT show any OS sheet
+ * and does NOT trigger blur — safe to call at mount.
+ */
+export async function supportsPrfStatic(): Promise<boolean> {
+  if (!('PublicKeyCredential' in window)) return false;
+  const anyPKC = PublicKeyCredential as any;
+  if (typeof anyPKC.getClientCapabilities === 'function') {
+    try {
+      const caps = await anyPKC.getClientCapabilities();
+      // Many builds expose caps.prf === true or an extensions array that includes 'prf'.
+      return !!(caps && (caps.prf === true || (Array.isArray(caps.extensions) && caps.extensions.includes('prf'))));
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
+/**
+ * Interactive one‑shot probe (user gesture only).
+ * Shows ONE OS sheet and checks, in a single call:
+ *  - PRF: does the authenticator return a 32‑byte 'prf.results.first'?
+ *  - largeBlob: is it supported / readable?
+ *
+ * We wrap the whole thing with withLockSuspended(..) so the blur during the OS sheet
+ * does NOT auto‑lock and yank the screen.
+ */
+export async function detectCapabilitiesInteractive(): Promise<{ prf: boolean; largeBlob: boolean; message?: string }> {
+  try {
+    const bio = await loadBioEnrollment();
+    if (!bio?.credentialId) return { prf: false, largeBlob: false, message: 'No local biometric enrollment found.' };
+
+    const rpId  = window.location.hostname;
+    const rawId = u8FromB64url(bio.credentialId);
+    const salt  = crypto.getRandomValues(new Uint8Array(32));
+
+    const cred = await withLockSuspended('webauthn-cap-probe', async () => {
+      return await navigator.credentials.get({
+        publicKey: {
+          rpId,
+          userVerification: 'required',
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          allowCredentials: [{ type: 'public-key', id: rawId }],
+          // Probe both PRF and largeBlob in a single sheet to avoid multiple blurs.
+          extensions: {
+            prf: { eval: { first: salt } } as any,
+            largeBlob: { read: true } as any
+          },
+          timeout: 30_000
+        },
+        mediation: 'optional'
+      } as CredentialRequestOptions) as PublicKeyCredential | null;
+    });
+
+    if (!cred) return { prf: false, largeBlob: false, message: 'Verification cancelled.' };
+
+    const ext = (cred as any).getClientExtensionResults?.() ?? {};
+    const prfOk = !!ext.prf?.results?.first && ext.prf.results.first.byteLength === 32;
+    const lbOk  = !!ext.largeBlob && (ext.largeBlob.supported === true || 'blob' in ext.largeBlob);
+
+    return { prf: prfOk, largeBlob: lbOk };
+  } catch (e: any) {
+    console.error('[mvault] detectCapabilitiesInteractive error:', e);
+    return { prf: false, largeBlob: false, message: e?.message ?? 'Capability probe failed.' };
+  }
+}
 
 export async function changePassphrase(newPass: string, currentPass?: string): Promise<void> {
   // Snapshot current state

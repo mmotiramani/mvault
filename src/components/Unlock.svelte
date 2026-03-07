@@ -16,7 +16,26 @@
   let passInput: HTMLInputElement | null = null;
 
 
- /* let enrolling = false;
+
+
+  import { biometricUnlockWithLargeBlob } from '../lib/app/session';
+  let unlocking = false;
+  let bioMsg = '';
+
+  async function onBiometricUnlock() {
+    unlocking = true; bioMsg = '';
+    try {
+      const r = await biometricUnlockWithLargeBlob();  // OS sheet + read + unlock(pass)
+      bioMsg = r.message;
+      // If r.ok, your usual “unlocked” path continues automatically
+    } catch (e) {
+      console.error(e); bioMsg = 'Biometric unlock failed.';
+    } finally {
+      unlocking = false;
+    }
+  }
+
+  /* let enrolling = false;
   let bioMsg = '';
 
   async function onEnableBiometrics() {
@@ -94,6 +113,9 @@
           title="Click to reveal"
           type="button"
         >👁️</button>
+
+
+
     <!-- button
       type="button"
       class="eye-btn"
@@ -131,6 +153,11 @@
   <small id="pass-help">Your passphrase never leaves this device.</small -->
   <button disabled={busy || !pass} type="submit">Unlock</button>
   {#if err}<div role="alert">{err}</div>{/if}
+
+  <button type="button" on:click={onBiometricUnlock} disabled={unlocking}>
+    {unlocking ? 'Unlocking…' : 'Unlock with biometrics'}
+  </button>
+  {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
 
 
 <!-- {#if $session.key} 

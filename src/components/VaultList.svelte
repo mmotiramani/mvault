@@ -28,8 +28,19 @@
     , enablePasswordlessWithPRF
     , biometricUnlockWithPRF
     , supportsPrf
+    , supportsPrfStatic
+    , detectCapabilitiesInteractive
   } from '../lib/app/session';
   import { withLockSuspended } from '../lib/app/uiGuard'; 
+
+
+  import { biometricGate, probePrfForThisCredential, supportsLargeBlobForThisCredential } from '../lib/app/session';
+
+  let canPRF = false;
+  let canLargeBlob = false;
+  let gateMsg = '';
+  let capMsg = '';
+  let checking = false;
 
   const uiDirty = writable(false);
   const markDirty = () => uiDirty.set(true);
@@ -92,6 +103,25 @@
       bioMsg = 'Enrollment failed.';
     } finally {
       enrolling = false;
+    }
+  }
+
+
+// SAFE hint at mount — NO OS prompt, NO blur, NO lock
+  supportsPrfStatic().then(v => { canPRF = v; });
+
+  async function onCheckCapsClick() {
+    checking = true; capMsg = '';
+    try {
+      const res = await detectCapabilitiesInteractive(); // OS sheet (user gesture), uiGuard prevents lock
+      canPRF = res.prf;
+      canLargeBlob = res.largeBlob;
+      if (res.message) capMsg = res.message;
+    } catch (e) {
+      console.error(e);
+      capMsg = 'Capability check failed.';
+    } finally {
+      checking = false;
     }
   }
 
@@ -456,11 +486,31 @@ if (!$session?.key) {
 
   onMount(() => {
     const stop = startAutoLock(10);
+  
+    // At mount, detect capabilities
+    /* (async () => {
+      canPRF = await probePrfForThisCredential();          // false on your Mac/Android today
+      canLargeBlob = await supportsLargeBlobForThisCredential(); // likely false on your Mac Chrome
+    })(); */
+
     refresh();
     const unsub = session.subscribe(() => refresh());
     window.addEventListener('keydown', onKey);
     return () => { unsub(); stop(); window.removeEventListener('keydown', onKey); };
   });
+
+
+  async function onBiometricGate() {
+    gateMsg = '';
+    const r = await biometricGate();                      // OS sheet -> UV
+    gateMsg = r.message;
+    if (r.ok) {
+      // Bring focus to passphrase field or keep UI as is
+      const el = document.getElementById('mv-pass');
+      (el as HTMLInputElement | null)?.focus({ preventScroll: true });
+    }
+  }
+
 </script>
 
 <div class="vault uses-full-height" style="display:grid; grid-template-columns: 340px 1fr; gap:1rem;">
@@ -479,11 +529,33 @@ if (!$session?.key) {
       <button class="btn ghost"   on:click={onExport}>Export</button>
     
       {#if $session.key}
+        
         <hr />
-        <button type="button" on:click={onEnableBiometrics} disabled={enrolling}>
-          {enrolling ? 'Enrolling…' : 'Enable biometrics on this device'}
-        </button>
-        {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
+        <div>
+          <button type="button" on:click={onCheckCapsClick} disabled={checking}>
+            {checking ? 'Checking…' : 'Check biometric features'}
+          </button>
+          {#if capMsg}<div role="status">{capMsg}</div>{/if}
+        </div>
+
+        <hr />
+       <div>
+          <button type="button" on:click={onBiometricGate}>
+              Verify with Face ID / Touch ID / Windows Hello
+            </button>
+            {#if gateMsg}<div role="status">{gateMsg}</div>{/if}
+          </div>
+
+        <div>
+          <button type="button" on:click={onEnableBiometrics} disabled={enrolling}>
+            {enrolling ? 'Enrolling…' : 'Enable biometrics on this device'}
+          </button>
+          {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
+          </div>
+        
+
+      {#if canLargeBlob}
+        <!-- show your largeBlob fallback buttons here -->
 
         <!-- One-time binding: store passphrase into largeBlob -->
           <div>
@@ -527,9 +599,12 @@ if (!$session?.key) {
             </button>
           </div>
 
-
+        {/if}
+        
+        {#if canPRF}
         <!-- PRF-preferred: one-time sealing of passphrase under PRF KEK -->
-          <div>
+        <!-- show your PRF enable/unlock buttons here -->
+        <div>
             <input
               type="password"
               placeholder="Confirm passphrase (once)"
@@ -551,6 +626,7 @@ if (!$session?.key) {
               {enablingPref ? 'Saving…' : 'Enable biometric unlock (preferred)'}
             </button>
           </div>
+        {/if}
 
           <!-- Try PRF-preferred unlock -->
           <div>
