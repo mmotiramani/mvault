@@ -20,6 +20,7 @@
 
   import { biometricUnlockWithLargeBlob, biometricUnlockWithPRF } from '../lib/app/session';
   let unlocking = false;
+  let enrolling = false;
   let bioMsg = '';
 
   async function onBiometricUnlock() {
@@ -36,9 +37,6 @@
     }
   }
 
-  /* let enrolling = false;
-  let bioMsg = '';
-
   async function onEnableBiometrics() {
     enrolling = true; bioMsg = '';
     try {
@@ -51,7 +49,6 @@
       enrolling = false;
     }
   }
-*/
   function toggleShow() {
     showPass = !showPass;
     // keep typing flow nice: refocus the input without scrolling
@@ -158,16 +155,10 @@
   <button type="button" on:click={onBiometricUnlock} disabled={unlocking}>
     {unlocking ? 'Unlocking…' : 'Unlock with biometrics'}
   </button>
-  {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
-
-
-<!-- {#if $session.key} 
-  <hr />
   <button type="button" on:click={onEnableBiometrics} disabled={enrolling}>
     {enrolling ? 'Enrolling…' : 'Enable biometrics on this device'}
   </button>
   {#if bioMsg}<div role="status">{bioMsg}</div>{/if}
-  {/if} -->
 
 </form>
 
@@ -189,82 +180,6 @@
   .field.passphrase { display: grid; gap: .4rem; }
   .field.passphrase label { font-weight: 600; }
 
-  /* Container for input + eye (absolute eye) */
-  .input-wrap {
-    position: relative;
-    display: grid;
-
-    /* Drive sizes from variables so spacing always lines up */
-    --eye-size: 32px;   /* desktop/laptop eye button size */
-    --eye-gap: 8px;     /* distance from input's right edge */
-    --eye-pad: 6px;     /* breathing room before the eye inside the field */
-  }
-
-  /* Passphrase input */
-  .input-wrap input {
-    background: var(--field-bg, #0f0f0f);
-    color: var(--text, #eaeaea);
-    border: 1px solid var(--field-border, #2a2a2a);
-    border-radius: 6px;
-    padding: .6rem .75rem;
-    font-size: 16px; /* avoid iOS zoom */
-    /* Exact space for the eye: width + gap + inner pad (no dead space) */
-    padding-right: calc(var(--eye-size) + var(--eye-gap) + var(--eye-pad));
-    position: relative;
-    z-index: 0;
-  }
-
-  /* Eye button: square, centered, above the input */
-  .eye {
-    position: absolute;
-    top: 50%;
-    right: var(--eye-gap);
-    transform: translateY(-50%); /* remove -1px nudge for true centering */
-
-    /* Square tap target – change only --eye-size to scale both dimensions */
-    inline-size: var(--eye-size);
-    block-size: var(--eye-size);
-
-    display: grid;
-    place-items: center; /* center the SVG */
-    border: 0;
-    background: transparent;
-    color: var(--muted, #9aa0a6);
-    border-radius: 8px;
-    cursor: pointer;
-
-    z-index: 1;                       /* sits above the input */
-    touch-action: manipulation;       /* better tap response */
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Make sure SVG doesn't add stray inline space */
-  .eye svg { display: block; pointer-events: none; }
-
-  /* Centered hover/focus visuals */
-  .eye:hover {
-    background: color-mix(in oklab, Canvas 92%, Highlight 8%);
-    color: var(--text, #eaeaea);
-  }
-  .eye:focus-visible {
-    outline: 2px solid var(--focus-ring, #2563eb);
-    outline-offset: 2px;
-  }
-
   .hint { color: var(--muted, #9aa0a6); font-size: .85rem; margin: 0; }
-
-  /* Expand invisible hitbox slightly without changing how it looks */
-  .eye::after {
-    content: '';
-    position: absolute;
-    inset: -6px;           /* +6px around for easier taps */
-    border-radius: 10px;
-  }
-
-  /* Mobile: enforce at least 44x44 target; input padding updates automatically */
-  @media (max-width: 700px) {
-    .input-wrap { --eye-size: 44px; --eye-gap: 8px; --eye-pad: 6px; }
-    .eye { right: var(--eye-gap); }
-  }
 </style>
 

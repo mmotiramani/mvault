@@ -22,7 +22,7 @@ import { decryptJSON } from '../crypto/crypto';
 // On unlock, we read it back after UV=required and call your existing unlock(passphrase).
 
 
-import { loadBioEnrollment, saveBioEnrollment, hasLocalBioEnrollment } from './bio';
+import { loadBioEnrollment, saveBioEnrollment, hasLocalBioEnrollment, clearBioEnrollment } from './bio';
 import { withLockSuspended } from './uiGuard';
 
 export type BioMode = 'prf' | 'sig' | 'unknown';
@@ -580,7 +580,14 @@ export async function changePassphrase(newPass: string, currentPass?: string): P
     });
 
     finishRekey(true, 'Passphrase changed');
-    showToast('Passphrase changed', 'success');
+
+    try {
+      await clearBioEnrollment();
+      showToast('Passphrase changed. Biometric enrollment was reset and must be re-enabled.', 'info');
+    } catch (bioErr) {
+      console.error('[mvault] failed to clear biometric enrollment after passphrase change:', bioErr);
+      showToast('Passphrase changed, but biometric reset failed. Please re-enable biometrics manually.', 'error');
+    }
   } catch (e: any) {
     console.error(e);
     finishRekey(false, e?.message || 'Failed to change passphrase');
