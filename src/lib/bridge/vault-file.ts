@@ -15,7 +15,53 @@ const toNumArray = (x: Uint8Array | number[]) => (Array.isArray(x) ? x : Array.f
 // Reuse header helpers from your rekey flow
 import { ensureCanary, deriveFromHeader } from '../crypto/header';
 import { saveHeaderInTx } from '../crypto/header'; // atomic header write in an existing tx [2](https://telekom-my.sharepoint.de/personal/mahesh_motiramani_t-systems_com/Documents/Microsoft%20Copilot%20Chat%20Files/rekey.ts.txt)
+import { deserializeVaultFile, openVaultFile, type VaultData, type VaultFile } from '../vault';
 
+
+type EncryptedExportPackage = {
+  version: number;
+  kdf: { type: 'PBKDF2'; hash: 'SHA-256'; iterations: number; salt: number[] };
+  iv: string;
+  cipher: string;
+};
+
+function isEncryptedExportPackage(value: unknown): value is EncryptedExportPackage {
+  if (!value || typeof value !== 'object') return false;
+  const pkg = value as Record<string, unknown>;
+  const kdf = pkg.kdf as Record<string, unknown> | undefined;
+
+  return (
+    pkg.version === 1 &&
+    typeof pkg.iv === 'string' &&
+    typeof pkg.cipher === 'string' &&
+    !!kdf &&
+    kdf.type === 'PBKDF2' &&
+    kdf.hash === 'SHA-256' &&
+    typeof kdf.iterations === 'number' &&
+    Array.isArray(kdf.salt)
+  );
+}
+
+function isNativeVaultFile(value: unknown): value is VaultFile {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, any>;
+  return (
+    o.magic === 'MVAULT' &&
+    o.version === 1 &&
+    !!o.kdf &&
+    typeof o.kdf.algo === 'string' &&
+    typeof o.kdf.salt_b64 === 'string' &&
+    typeof o.kdf.opslimit === 'number' &&
+    typeof o.kdf.memlimit_mb === 'number' &&
+    typeof o.kdf.parallelism === 'number' &&
+    !!o.dek_wrap &&
+    typeof o.dek_wrap.nonce_b64 === 'string' &&
+    typeof o.dek_wrap.ciphertext_b64 === 'string' &&
+    !!o.payload &&
+    typeof o.payload.nonce_b64 === 'string' &&
+    typeof o.payload.ciphertext_b64 === 'string'
+  );
+}
 
 /** Export an encrypted, compact (.mvault.json) package using a FILE PASSPHRASE. */
 export async function exportEncryptedToDownload(
@@ -81,23 +127,46 @@ export async function importEncryptedFromText(text: string, filePassphrase: stri
       return;
     }
 */
-    // Strict encrypted package only (no legacy support)
-    const pkg = JSON.parse(text) as {
-      version: number;
-      kdf: { type: 'PBKDF2'; hash: 'SHA-256'; iterations: number; salt: number[] };
-      iv: string; cipher: string;
-    };
-    const decoded = await decryptPackage<{
-      format: 'mvault-export';
-      formatVersion: number;
-      createdAt: number;
-      data: Array<{ id: string; createdAt: number; updatedAt: number; payload: VaultItemPayload }>;
-    }>(pkg, filePassphrase);
-
-    if (decoded.format !== 'mvault-export' || decoded.formatVersion !== 1) {
-      throw new Error('Unsupported export format');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error('Invalid package: not valid JSON');
     }
 
+    let rows: Array<{ id: string; createdAt: number; updatedAt: number; payload: VaultItemPayload }> = [];
+
+    if (isEncryptedExportPackage(parsed)) {
+      const decoded = await decryptPackage<{
+        format: 'mvault-export';
+        formatVersion: number;
+        createdAt: number;
+        data: Array<{ id: string; createdAt: number; updatedAt: number; payload: VaultItemPayload }>;
+      }>(parsed, filePassphrase);
+
+      if (decoded.format !== 'mvault-export' || decoded.formatVersion !== 1) {
+        throw new Error('Unsupported export format');
+      }
+      rows = decoded.data ?? [];
+    } else if (isNativeVaultFile(parsed)) {
+      const vaultFile: VaultFile = deserializeVaultFile(JSON.stringify(parsed));
+      const vaultData: VaultData = await openVaultFile(filePassphrase, vaultFile);
+      rows = (vaultData.entries ?? []).map((entry, index) => ({
+        id: entry.id ?? `${Date.now()}-${index}`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        payload: {
+          name: entry.app ?? 'Imported item',
+          username: entry.username ?? '',
+          password: entry.password ?? '',
+          url: entry.url,
+          tags: [],
+          notes: entry.notes
+        }
+      }));
+    } else {
+      throw new Error('Invalid package: missing iv/cipher/kdf.salt');
+    }
 
     // 2) Build a NEW header (fresh salt; canary will be attached below)
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -116,21 +185,15 @@ export async function importEncryptedFromText(text: string, filePassphrase: stri
     const headerToSave: VaultHeader = { ...newHeader, canary };
 
     // 3) One atomic IDB transaction: clear items, put all items, save header
-
     const db = await openDBWithSchema();
-
-    // Optional clear
-  
-        const tx = db.transaction([ITEMS_STORE, META_STORE], 'readwrite');
-        const itemsStore = tx.objectStore(ITEMS_STORE);
+    const tx = db.transaction([ITEMS_STORE, META_STORE], 'readwrite');
+    const itemsStore = tx.objectStore(ITEMS_STORE);
 
     // Clear all existing items (REPLACE semantics)
     itemsStore.clear();
 
-
-   // Write all items re-encrypted with the NEW key
-    for (const it of decoded.data) {
-
+    // Write all items re-encrypted with the NEW key
+    for (const it of rows) {
       const sealed = await encryptJSON(newKey, it.payload);
       const enc: Encrypted = { v: 2 as const, iv: toNumArray((sealed as any).iv), ct: toNumArray((sealed as any).ct) };
       const now = Date.now();
@@ -154,7 +217,7 @@ export async function importEncryptedFromText(text: string, filePassphrase: stri
     });
     db.close();
 
-   // 4) Update runtime session: vault is now unlocked with the NEW passphrase/key
+    // 4) Update runtime session: vault is now unlocked with the NEW passphrase/key
     session.update((s: any) => ({ ...s, key: newKey, header: headerToSave }));
     showToast('Vault replaced from encrypted file', 'success');
   } catch (err: any) {
